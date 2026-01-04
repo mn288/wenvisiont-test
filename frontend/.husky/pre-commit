@@ -1,0 +1,35 @@
+#!/bin/sh
+
+
+# Get list of staged files
+STAGED_FILES=$(git diff --cached --name-only)
+
+# Frontend Integration
+if echo "$STAGED_FILES" | grep -q "^frontend/"; then
+  echo "Frontend files detected. Running Frontend Checks..."
+  cd frontend
+  if ! npx lint-staged --config lint-staged.config.mjs; then
+    echo "Frontend checks failed"
+    exit 1
+  fi
+  cd ..
+else
+  echo "No frontend files staged. Skipping frontend checks."
+fi
+
+# Backend Integration
+if echo "$STAGED_FILES" | grep -q "^backend/"; then
+  echo "Backend files detected. Running Backend Checks..."
+  cd backend
+  if ! uv run ruff check .; then
+    echo "Backend linting failed"
+    exit 1
+  fi
+  if ! uv run ruff format --check .; then
+    echo "Backend formatting failed. Run 'uv run ruff format .' in backend/ to fix."
+    exit 1
+  fi
+  cd ..
+else
+  echo "No backend files staged. Skipping backend checks."
+fi
