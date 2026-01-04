@@ -1,0 +1,10 @@
+{
+  "projects": [
+    {
+      "root": ".",
+      "graphs": {
+        "agent": "src.brain.graph:workflow"
+      }
+    }
+  ]
+}

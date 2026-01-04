@@ -1,0 +1,57 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "crewai>=1.7.2",
+    "fastapi>=0.128.0",
+    "fastmcp>=2.12.5",
+    "langchain>=1.2.0",
+    "langgraph>=1.0.5",
+    "langgraph-checkpoint-postgres>=3.0.2",
+    "psycopg>=3.3.2",
+    "pydantic>=2.11.10",
+    "uvicorn>=0.40.0",
+    "langchain-openai>=0.3.0",
+    "ruff>=0.14.10",
+    "aioboto3>=15.5.0",
+    "aiofiles>=25.1.0",
+    "alembic>=1.17.2",
+    "sqlmodel>=0.0.31",
+    "orjson>=3.11.5",
+]
+
+[tool.uv]
+override-dependencies = ["openai>=1.110.0"]
+
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.40.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+
+
+[tool.poe.tasks]
+dev = "uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level info"

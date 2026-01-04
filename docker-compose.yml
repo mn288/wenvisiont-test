@@ -1,0 +1,10 @@
+services:
+  backend:
+    build: .
+    volumes:
+      - ./src:/app/src
+    environment:
+      - POSTGRES_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # command: uv run uvicorn src.api.main:app --host 0.0.0.0 --reload
