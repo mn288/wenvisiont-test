@@ -4,13 +4,14 @@ from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from src.brain.logger import LogHandler
-from src.core.database import pool
-from src.crew.agents import llm
-from src.models.state import AgentResult, AgentTask, GraphState
-from src.services.crew import CrewService
-from src.services.infrastructure import InfrastructureService
-from src.services.orchestrator import OrchestratorService
+from brain.logger import LogHandler
+from core.database import pool
+from crew.agents import llm
+from models.state import AgentResult, AgentTask, GraphState
+from services.crew import CrewService
+from services.infrastructure import InfrastructureService
+from services.orchestrator import OrchestratorService
+from utils.pii import mask_pii
 
 # Initialize Services
 orchestrator_service = OrchestratorService()
@@ -25,6 +26,10 @@ async def preprocess_node(state: GraphState, config: RunnableConfig) -> dict:
     checkpoint_id = config["configurable"].get("checkpoint_id")
 
     request = state.get("input_request", "")
+
+    # Security: Mask PII in the input request immediately (using global import)
+    request = mask_pii(request)
+
     await logger.log_step(thread_id, "preprocess", "info", f"Validating: {request}", checkpoint_id)
 
     if not request:
@@ -125,34 +130,50 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
             task=current_task, context=state.get("context", ""), infra=infra_config
         )
 
-        # Log the actual content for history
+        # Log the actual content for history (Masked)
+        masked_summary = mask_pii(result.summary)
+        masked_raw = mask_pii(result.raw_output)
+
+        # Update metadata with more details if needed
+        # Ensuring we pass metadata to all logs where logical
+        log_metadata = result.metadata
+
         await logger.log_step(
             thread_id,
             agent_name,
             "thought",
-            result.summary,
+            masked_summary,
             checkpoint_id,
+            metadata=log_metadata,
         )
 
-        # Log as a Message for Chat UI
+        # Log as a Message for Chat UI (Masked)
         await logger.log_step(
             thread_id,
             agent_name,
             "message",  # New type for Chat UI
-            result.summary,
+            masked_summary,
             checkpoint_id,
+            metadata=log_metadata,
         )
 
         await logger.log_step(
             thread_id,
             agent_name,
             "output",
-            f"Done. {result.summary[:100]}",
+            f"Done. {masked_summary[:100]}",
             checkpoint_id,
+            metadata=log_metadata,
         )
 
+        # IMPORTANT: Return masked results so the downstream nodes (Graph State)
+        # only ever contain safe DTOs.
+        result_dump = result.model_dump()
+        result_dump["summary"] = masked_summary
+        result_dump["raw_output"] = masked_raw
+
         return {
-            "results": [result.model_dump()],
+            "results": [result_dump],
             "messages": [AIMessage(content=result.summary, name=agent_name)],
             "context": f"\n\nAgent {agent_name} Findings:\n{result.summary}",
         }
@@ -211,11 +232,14 @@ async def qa_node(state: GraphState, config: RunnableConfig) -> dict:
 
     response = await llm.acall(prompt)
 
+    # Mask PII in final response
+    masked_response = mask_pii(response)
+
     # Log full response as content for history
-    await logger.log_step(thread_id, "qa", "thought", response, checkpoint_id)
+    await logger.log_step(thread_id, "qa", "thought", masked_response, checkpoint_id)
 
     # Log as Chat Message
-    await logger.log_step(thread_id, "qa", "message", response, checkpoint_id)
+    await logger.log_step(thread_id, "qa", "message", masked_response, checkpoint_id)
 
     await logger.log_step(thread_id, "qa", "output", "Done.", checkpoint_id)
 

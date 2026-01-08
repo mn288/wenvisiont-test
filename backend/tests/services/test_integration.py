@@ -1,9 +1,12 @@
 import asyncio
 
-from src.tools.adapter import MCPAdapter
-from src.tools.server import mcp
+import pytest
+
+from tools.adapter import MCPAdapter
+from tools.server import mcp
 
 
+@pytest.mark.asyncio
 async def test_integration():
     print("Initializing Adapter...")
     adapter = MCPAdapter([mcp])

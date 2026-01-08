@@ -4,13 +4,15 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from services.infrastructure import InfrastructureService
+
 router = APIRouter()
 
 # Allow listing files in the project root (or specific safe directories)
 # For this demo, we'll assume the workspace root is safe, but we should traverse up carefully.
 # In a real app, restrict this to a sandbox.
 # Point to a dedicated workspace folder for agent outputs
-WORKSPACE_ROOT = "/tmp/sfeir/workspace"
+WORKSPACE_ROOT = InfrastructureService.BASE_WORKSPACE
 if not os.path.exists(WORKSPACE_ROOT):
     os.makedirs(WORKSPACE_ROOT, exist_ok=True)
 

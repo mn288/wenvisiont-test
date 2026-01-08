@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { generateAgent, saveAgent, listMCPServers, AgentConfig } from '@/lib/api';
+import {
+  generateAgent,
+  saveAgent,
+  listMCPServers,
+  getTenantAllowedMCPServers,
+  AgentConfig,
+} from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
 import { Textarea } from '@/components/ui/textarea';
@@ -31,7 +37,18 @@ export default function AgentGenerator({ open, onClose, onGenerate }: AgentGener
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    listMCPServers().then(setAvailableMcp);
+    // Fetch MCP servers and filter by tenant's allowed list
+    const loadMcpOptions = async () => {
+      const allServers = await listMCPServers();
+      const allowed = await getTenantAllowedMCPServers();
+      // If allowed is empty, show all servers (no restrictions)
+      if (allowed.length > 0) {
+        setAvailableMcp(allServers.filter((s) => allowed.includes(s)));
+      } else {
+        setAvailableMcp(allServers);
+      }
+    };
+    loadMcpOptions();
   }, []);
 
   const handleGenerate = async () => {

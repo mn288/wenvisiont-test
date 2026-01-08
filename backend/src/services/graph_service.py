@@ -1,8 +1,8 @@
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph.state import CompiledStateGraph
 
-from src.brain.graph import build_workflow
-from src.core.database import pool
+from brain.graph import build_workflow
+from core.database import pool
 
 
 class GraphService:

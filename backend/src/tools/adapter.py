@@ -7,7 +7,7 @@ from pydantic import BaseModel, PrivateAttr, create_model
 
 # Check if MCPServerConfig is available, if not use Dict or define locally for typing
 try:
-    from src.models.mcp import MCPServerConfig
+    from models.mcp import MCPServerConfig
 except ImportError:
     MCPServerConfig = Any
 

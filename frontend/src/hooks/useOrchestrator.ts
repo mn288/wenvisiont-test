@@ -151,10 +151,19 @@ export const useOrchestrator = () => {
 
           if (parsed.type === 'token') {
             const node = parsed.node || 'unknown';
-            setStreamedContent((prev) => ({
-              ...prev,
-              [node]: (prev[node] || '') + parsed.content,
-            }));
+            setStreamedContent((prev) => {
+              const newContent = (prev[node] || '') + parsed.content;
+              const newState = {
+                ...prev,
+                [node]: newContent,
+              };
+              
+              // NEW: Real-time update of finalResponse for feedback nodes
+              if (node === 'qa' || node === 'preprocess') {
+                setFinalResponse(newContent);
+              }
+              return newState;
+            });
           } else if (parsed.type === 'node_start') {
             const node = parsed.node;
             setActiveNodes((prev) => [...prev.filter((n) => n !== node), node]);
@@ -262,27 +271,33 @@ export const useOrchestrator = () => {
             });
 
 
-            if ((node === 'qa' || node === 'preprocess') && parsed.output) {
-              let outputStr = parsed.output;
-              
-              // If output is an object, extract the actual text content
-              if (typeof parsed.output === 'object') {
-                // Try to find text content in common field names
-                if (parsed.output.output) {
-                  outputStr = parsed.output.output;
-                } else if (parsed.output.content) {
-                  outputStr = parsed.output.content;
-                } else if (parsed.output.text) {
-                  outputStr = parsed.output.text;
-                } else if (parsed.output.result) {
-                  outputStr = parsed.output.result;
-                } else {
-                  // Fallback: stringify as JSON only if we can't find text content
-                  outputStr = "```json\n" + JSON.stringify(parsed.output, null, 2) + "\n```";
-                }
+            if ((node === 'qa' || node === 'preprocess')) {
+              // Prefer constructed streamed content if available (matches refresh logic)
+              if (streamedContent[node]) {
+                  setFinalResponse(streamedContent[node]);
+              } else if (parsed.output) {
+                  // Fallback to parsed output logic
+                  let outputStr = parsed.output;
+                  
+                  // If output is an object, extract the actual text content
+                  if (typeof parsed.output === 'object') {
+                    // Try to find text content in common field names
+                    if (parsed.output.output) {
+                      outputStr = parsed.output.output;
+                    } else if (parsed.output.content) {
+                      outputStr = parsed.output.content;
+                    } else if (parsed.output.text) {
+                      outputStr = parsed.output.text;
+                    } else if (parsed.output.result) {
+                      outputStr = parsed.output.result;
+                    } else {
+                      // Fallback: stringify as JSON only if we can't find text content
+                      outputStr = "```json\n" + JSON.stringify(parsed.output, null, 2) + "\n```";
+                    }
+                  }
+                  
+                  setFinalResponse(outputStr);
               }
-              
-              setFinalResponse(outputStr);
             }
           } else if (parsed.type === 'checkpoint') {
              // Dedicated checkpoint event to update IDs
@@ -355,6 +370,22 @@ export const useOrchestrator = () => {
                 message: 'Halted: Human Feedback Required',
               },
             ]);
+          } else if (parsed.type === 'error') {
+            eventSource.close();
+            eventSourceRef.current = null;
+            setIsLoading(false);
+            setIsPaused(false);
+            setLogs((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                timestamp: new Date(),
+                type: 'error',
+                message: `Error: ${parsed.content}`,
+              },
+            ]);
+            // Also set final response to error to make it visible in main view
+            setFinalResponse(`### Execution Error\n\n${parsed.content}`);
           }
         } catch (e) {
           console.error('Parse error', e);

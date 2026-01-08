@@ -36,3 +36,27 @@ module "compute" {
   
   depends_on = [module.database]
 }
+
+# -------------------------------------------------------------------------
+# Phase 3 Hardening: Cloud Armor WAF
+# -------------------------------------------------------------------------
+module "cloud_armor" {
+  source     = "./modules/cloud_armor"
+  project_id = var.project_id
+}
+
+# -------------------------------------------------------------------------
+# Phase 3 Hardening: Least-Privilege IAM Bindings
+# -------------------------------------------------------------------------
+module "iam" {
+  source              = "./modules/iam"
+  project_id          = var.project_id
+  backend_sa_email    = module.compute.backend_sa_email
+  frontend_sa_email   = module.compute.frontend_sa_email
+  backend_location    = var.region
+  backend_service_name = "backend"
+  enable_authenticated_invoker = false  # Set to true for production
+  
+  depends_on = [module.compute]
+}
+

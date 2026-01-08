@@ -3,7 +3,7 @@ import json
 
 from fastmcp import Client
 
-from src.tools.server import mcp
+from tools.server import mcp
 
 
 async def inspect():

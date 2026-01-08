@@ -1,5 +1,7 @@
 from datetime import datetime
+from typing import Any, Dict
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -13,6 +15,7 @@ class StepLog(SQLModel, table=True):
     content: str
     created_at: datetime = Field(default_factory=datetime.now)
     checkpoint_id: str | None = None
+    metadata_: Dict[str, Any] | None = Field(default=None, sa_column=Column(JSON), alias="metadata")
 
 
 class StepLogResponse(SQLModel):
@@ -24,3 +27,4 @@ class StepLogResponse(SQLModel):
     created_at: datetime
     checkpoint_id: str | None = None
     parent_checkpoint_id: str | None = None
+    metadata_: dict | None = Field(default=None, alias="metadata")

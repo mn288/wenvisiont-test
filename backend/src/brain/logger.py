@@ -15,15 +15,22 @@ class LogHandler:
         log_type: str,
         content: Any,
         checkpoint_id: str = None,
+        metadata: dict = None,
     ):
         """
         Log a step event to the database asynchronously.
         content can be a string or a dict (which will be JSON formatted).
         """
+        text_content_str = ""
+        metadata_json = None
+
         if isinstance(content, (dict, list)):
-            content_str = json.dumps(content)
+            text_content_str = json.dumps(content)
         else:
-            content_str = str(content)
+            text_content_str = str(content)
+
+        if metadata:
+            metadata_json = json.dumps(metadata)
 
         # Use Application Time (UTC) to match LangGraph checkpoints
         from datetime import datetime, timezone
@@ -35,16 +42,17 @@ class LogHandler:
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
-                    INSERT INTO step_logs (thread_id, step_name, log_type, content, created_at, checkpoint_id)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO step_logs (thread_id, step_name, log_type, content, created_at, checkpoint_id, metadata_)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         thread_id,
                         step_name,
                         log_type,
-                        content_str,
+                        text_content_str,
                         created_at,
                         checkpoint_id,
+                        metadata_json,
                     ),
                 )
                 await conn.commit()

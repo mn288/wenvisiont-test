@@ -3,8 +3,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from src.models.infrastructure import S3Config
-from src.services.infrastructure import InfrastructureService
+from models.infrastructure import S3Config
+from services.infrastructure import InfrastructureService
 
 router = APIRouter()
 service = InfrastructureService()

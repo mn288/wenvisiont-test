@@ -29,13 +29,15 @@ override-dependencies = ["openai>=1.110.0"]
 
 [dependency-groups]
 dev = [
+    "expects>=0.9.0",
     "poethepoet>=0.40.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
 ]
 
 [tool.pytest.ini_options]
-pythonpath = "."
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 120
@@ -54,4 +56,4 @@ line-ending = "auto"
 
 
 [tool.poe.tasks]
-dev = "uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level info"
+dev = "env PYTHONPATH=src uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload --log-level info"

@@ -1,0 +1,18 @@
+name: "human_manager"
+display_name: "Human Manager"
+description: "A node that pauses execution and waits for human approval or input."
+output_state_key: "approval_status"
+
+agent:
+  role: "Human Manager"
+  goal: "Review and approve critical actions or provide specific input when requested."
+  backstory: "You are a human supervisor responsible for high-stakes decisions."
+  verbose: true
+  allow_delegation: false
+  tools: []
+  mcp_servers: []
+
+task:
+  description: "Review the current state and provide approval or feedback: {input}"
+  expected_output: "Approval or rejection with comments."
+  async_execution: false

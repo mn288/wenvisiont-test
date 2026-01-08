@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from typing import List, Optional
 
-from src.brain.registry import AgentRegistry
-from src.crew.agents import llm
-from src.models.state import AgentResult
+from brain.registry import AgentRegistry
+from crew.agents import llm
+from models.state import AgentResult
 
 
 class OrchestratorService:

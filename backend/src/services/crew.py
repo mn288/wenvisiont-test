@@ -1,8 +1,8 @@
 from crewai import Crew
 
-from src.brain.registry import AgentRegistry
-from src.models.infrastructure import InfrastructureConfig
-from src.models.state import AgentResult, AgentTask
+from brain.registry import AgentRegistry
+from models.infrastructure import InfrastructureConfig
+from models.state import AgentResult, AgentTask
 
 
 class CrewService:
@@ -53,6 +53,10 @@ class CrewService:
         summary = result_str[:500] + "..." if len(result_str) > 500 else result_str
 
         # 6. Return Typed Result
+        # 6. Return Typed Result
+        # Extract token usage if available (CrewAI Output usually has user_id, raw, etc. check for usage)
+        token_usage = getattr(result_raw, "token_usage", {})
+
         return AgentResult(
             task_id=task.id,
             summary=summary,
@@ -60,5 +64,8 @@ class CrewService:
             metadata={
                 "agent_role": node_config.agent.role,
                 "model": agent_instance.llm.model if hasattr(agent_instance, "llm") else "unknown",
+                "usage": token_usage.model_dump()
+                if hasattr(token_usage, "model_dump")
+                else (token_usage.dict() if hasattr(token_usage, "dict") else token_usage),
             },
         )

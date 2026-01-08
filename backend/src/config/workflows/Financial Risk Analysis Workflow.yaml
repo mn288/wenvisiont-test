@@ -1,0 +1,35 @@
+name: Financial Risk Analysis Workflow
+description: A multi-agent workflow to analyze and provide a detailed rationale on
+  why a user should not buy a specific stock, focusing on industry supply chain issues
+  and related news.
+nodes:
+- id: research_supply_chain
+  type: research
+  config:
+    query: Recent supply chain disruptions in the target industry, including raw material
+      shortages, logistics delays, and geopolitical impacts
+- id: research_company_news
+  type: research
+  config:
+    query: Recent news about the specific company's financial health, leadership changes,
+      and operational challenges
+- id: truth_verifier_supply_chain
+  type: truth_verifier_agent
+  config: {}
+- id: truth_verifier_company_news
+  type: truth_verifier_agent
+  config: {}
+- id: senior_engineer_analysis
+  type: senior_software_engineer_dry_src
+  config:
+    purpose: Refactor and structure the findings into a clear, maintainable analysis
+      report highlighting risks
+edges:
+- source: research_supply_chain
+  target: truth_verifier_supply_chain
+- source: research_company_news
+  target: truth_verifier_company_news
+- source: truth_verifier_supply_chain
+  target: senior_engineer_analysis
+- source: truth_verifier_company_news
+  target: senior_engineer_analysis

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Type
 
@@ -35,9 +36,40 @@ class AsyncFileReadTool(BaseTool):
 
         return target_path
 
-    async def _run(self, file_path: str) -> str:
-        """Read file asynchronously."""
-        return await self._arun(file_path)
+    def _run(self, file_path: str) -> str:
+        """Read file synchronously (wrapper around async)."""
+        try:
+            loop = asyncio.get_running_loop()
+            # If already in a loop, we can't block it with run_until_complete
+            # If we are in LangGraph/FastAPI, we shouldn't be calling this sync method anyway if properly awaited.
+            # But CrewAI agents might call .run() if they think the tool is sync.
+            # For checking if loop is running:
+            if loop.is_running():
+                # We are in trouble if we block here.
+                # Ideally, CrewAI agents should use `arun`.
+                # Fallback: Raise error telling agent to use async or return a future?
+                # Actually, `aiofiles` is async. If we need sync capability fallback, we should use `open()`.
+                return self._run_sync(file_path)
+            else:
+                return loop.run_until_complete(self._arun(file_path))
+        except RuntimeError:
+            return asyncio.run(self._arun(file_path))
+
+    def _run_sync(self, file_path: str) -> str:
+        """Fallback for sync execution."""
+        try:
+            full_path = self._get_safe_path(file_path)
+        except ValueError as e:
+            return str(e)
+
+        if not os.path.exists(full_path):
+            return f"Error: File {file_path} does not exist at {full_path}."
+        try:
+            with open(full_path, "r") as f:
+                content = f.read()
+            return content
+        except Exception as e:
+            return f"Error reading file: {str(e)}"
 
     async def _arun(self, file_path: str) -> str:
         try:
@@ -46,9 +78,9 @@ class AsyncFileReadTool(BaseTool):
             return str(e)
 
         if not os.path.exists(full_path):
-            return f"Error: File {file_path} does not exist."
+            return f"Error: File {file_path} does not exist at {full_path}."
         try:
-            async with aiofiles.open(file_path, mode="r") as f:
+            async with aiofiles.open(full_path, mode="r") as f:
                 content = await f.read()
             return content
         except Exception as e:
@@ -83,8 +115,35 @@ class AsyncFileWriteTool(BaseTool):
 
         return target_path
 
-    async def _run(self, file_path: str, content: str, append: bool = False) -> str:
-        return await self._arun(file_path, content, append)
+    def _run(self, file_path: str, content: str, append: bool = False) -> str:
+        """Write file synchronously (wrapper around async)."""
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                return self._run_sync(file_path, content, append)
+            else:
+                return loop.run_until_complete(self._arun(file_path, content, append))
+        except RuntimeError:
+            return asyncio.run(self._arun(file_path, content, append))
+
+    def _run_sync(self, file_path: str, content: str, append: bool = False) -> str:
+        try:
+            full_path = self._get_safe_path(file_path)
+        except ValueError as e:
+            return str(e)
+
+        mode = "a" if append else "w"
+        try:
+            directory = os.path.dirname(full_path)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory)
+
+            with open(full_path, mode=mode) as f:
+                f.write(content)
+            print(f"DEBUG: AsyncFileWriteTool (Sync Fallback) wrote to: {full_path}")
+            return f"Successfully wrote to {file_path} (Absolute: {full_path})"
+        except Exception as e:
+            return f"Error writing file: {str(e)}"
 
     async def _arun(self, file_path: str, content: str, append: bool = False) -> str:
         try:
@@ -101,6 +160,7 @@ class AsyncFileWriteTool(BaseTool):
 
             async with aiofiles.open(full_path, mode=mode) as f:
                 await f.write(content)
-            return f"Successfully wrote to {file_path}"
+            print(f"DEBUG: AsyncFileWriteTool wrote to: {full_path}")
+            return f"Successfully wrote to {file_path} (Absolute: {full_path})"
         except Exception as e:
             return f"Error writing file: {str(e)}"

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 import aioboto3
 
-from src.models.infrastructure import InfrastructureConfig, S3Config
+from models.infrastructure import InfrastructureConfig, S3Config
 
 
 class InfrastructureService:
@@ -19,8 +19,6 @@ class InfrastructureService:
         Values are typically fetched from DB or User Settings (Mocks for now).
         """
 
-        # 1. Local Workspace
-        # We create a sandboxed folder for this thread
         # 1. Local Workspace
         # We create a sandboxed folder for this thread within the visible workspace
         # Structure: backend/workspace/{thread_id}/

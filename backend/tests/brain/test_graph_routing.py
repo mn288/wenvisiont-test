@@ -1,6 +1,6 @@
 import pytest
 
-from src.brain.graph import END, route_preprocess
+from brain.graph import END, route_preprocess
 
 
 @pytest.mark.asyncio

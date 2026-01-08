@@ -9,6 +9,8 @@ export interface StepLog {
   parent_checkpoint_id?: string | null;
 }
 
+export const TENANT_ID = 'bank-a'; // Default tenant for development
+
 export interface ForkResponse {
   status: string;
   message: string;
@@ -58,7 +60,7 @@ export interface TopologyNode {
   node: string;
   parallel_nodes?: string[];
   created_at: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export async function fetchTopology(threadId: string): Promise<TopologyNode[]> {
@@ -70,12 +72,11 @@ export async function fetchTopology(threadId: string): Promise<TopologyNode[]> {
     },
   });
   if (!response.ok) {
-    console.warn("Failed to fetch topology, falling back to logs only.");
+    console.warn('Failed to fetch topology, falling back to logs only.');
     return [];
   }
   return response.json();
 }
-
 
 export async function fetchConversations(): Promise<Conversation[]> {
   const response = await fetch('http://localhost:8000/history/conversations', {
@@ -106,8 +107,8 @@ export interface LogEntry {
   type: 'system' | 'node-start' | 'node-end' | 'error' | 'info' | 'thought' | 'tool';
   message: string;
   node?: string; // Optional context about which node generated this
-  input?: any;
-  output?: any;
+  input?: unknown;
+  output?: unknown;
 }
 export interface AgentConfig {
   name: string;
@@ -133,7 +134,9 @@ export interface AgentConfig {
 }
 
 export async function listAgents(): Promise<AgentConfig[]> {
-  const res = await fetch('http://localhost:8000/agents/');
+  const res = await fetch('http://localhost:8000/agents/', {
+    headers: { 'X-Tenant-ID': TENANT_ID },
+  });
   if (!res.ok) throw new Error('Failed to list agents');
   return res.json();
 }
@@ -198,6 +201,8 @@ export interface S3Config {
 
 export interface InfrastructureConfig {
   s3?: S3Config;
+  local_workspace_path?: string;
+  allowed_mcp_servers?: string[];
 }
 
 export interface FileItem {
@@ -210,6 +215,23 @@ export async function getInfrastructureConfig(): Promise<InfrastructureConfig> {
   const res = await fetch('http://localhost:8000/infrastructure/config');
   if (!res.ok) throw new Error('Failed to get config');
   return res.json();
+}
+
+/**
+ * Fetch allowed MCP servers for the current tenant.
+ * Returns empty array if no restrictions (all servers allowed).
+ */
+export async function getTenantAllowedMCPServers(): Promise<string[]> {
+  try {
+    const config = await getConfiguration('infrastructure_config');
+    if (config?.value && typeof config.value === 'object') {
+      const val = config.value as { allowed_mcp_servers?: string[] };
+      return val.allowed_mcp_servers || [];
+    }
+  } catch (e) {
+    console.warn('Failed to fetch tenant MCP config:', e);
+  }
+  return [];
 }
 
 export async function updateInfrastructureConfig(config: InfrastructureConfig): Promise<void> {
@@ -233,7 +255,7 @@ export async function verifyS3Connection(config: S3Config): Promise<void> {
 // Configuration API
 export interface ConfigurationItem {
   key: string;
-  value: any;
+  value: unknown;
 }
 
 export async function getConfiguration(key: string): Promise<ConfigurationItem | null> {
@@ -243,12 +265,76 @@ export async function getConfiguration(key: string): Promise<ConfigurationItem |
   return res.json();
 }
 
-export async function saveConfiguration(key: string, value: any): Promise<ConfigurationItem> {
+export async function saveConfiguration(key: string, value: unknown): Promise<ConfigurationItem> {
   const res = await fetch('http://localhost:8000/configurations/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key, value }),
   });
   if (!res.ok) throw new Error('Failed to save configuration');
+  return res.json();
+}
+
+export interface GraphNode {
+  id: string;
+  type: string;
+  config: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  condition?: string;
+}
+
+export interface GraphConfig {
+  name: string;
+  description: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export async function architectAgent(prompt: string): Promise<GraphConfig> {
+  const res = await fetch('http://localhost:8000/architect/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Tenant-ID': TENANT_ID,
+    },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to architect agent' }));
+    throw new Error(error.detail || 'Failed to architect agent');
+  }
+  return res.json();
+}
+
+export async function listWorkflows(): Promise<GraphConfig[]> {
+  const res = await fetch('http://localhost:8000/workflows/');
+  if (!res.ok) throw new Error('Failed to list workflows');
+  return res.json();
+}
+
+export async function saveWorkflow(config: GraphConfig): Promise<GraphConfig> {
+  const res = await fetch('http://localhost:8000/workflows/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to save workflow');
+  return res.json();
+}
+
+export interface SystemStats {
+  total_invocations: number;
+  active_agents: number;
+  compliance_score: number;
+  system_health: string;
+}
+
+export async function getStats(): Promise<SystemStats> {
+  const res = await fetch('http://localhost:8000/stats/');
+  if (!res.ok) throw new Error('Failed to fetch stats');
   return res.json();
 }

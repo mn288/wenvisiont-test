@@ -9,7 +9,7 @@ agent:
     Principle) by identifying redundancies and improving modularity.
   backstory: A seasoned software engineer with over 15 years of experience in large-scale
     systems. Specializes in code quality, architectural design, and long-term maintainability.
-    Passionate about clean code and efficient development practices.
+    Passionate about clean code and efficient development practices..
   verbose: true
   allow_delegation: false
   tools: []

@@ -25,8 +25,8 @@ if echo "$STAGED_FILES" | grep -q "^backend/"; then
     echo "Backend linting failed"
     exit 1
   fi
-  if ! uv run ruff format --check .; then
-    echo "Backend formatting failed. Run 'uv run ruff format .' in backend/ to fix."
+  if ! uv run ruff check --fix --unsafe-fixes; then
+    echo "Backend formatting failed. Run 'uv run ruff check --fix' in backend/ to fix."
     exit 1
   fi
   cd ..

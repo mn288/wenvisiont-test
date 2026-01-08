@@ -33,6 +33,7 @@ class AgentResult(BaseModel):
     summary: str = Field(..., description="Concise summary of the result")
     raw_output: str = Field(..., description="Full output from the agent/tool")
     artifacts: List[Dict[str, Any]] = Field(default_factory=list, description="Structured artifacts (e.g. usage stats)")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Execution metadata (tokens, model, etc.)")
     timestamp: datetime = Field(default_factory=datetime.now)
 
 

@@ -1,10 +1,11 @@
 from typing import Optional, Type
 
 import aioboto3
+import aiohttp
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from src.models.infrastructure import S3Config
+from models.infrastructure import S3Config
 
 
 class S3ListBucketsSchema(BaseModel):
@@ -75,10 +76,20 @@ class AsyncS3ReadTool(BaseTool):
         session = self._get_session()
         try:
             async with session.client("s3") as s3:
-                response = await s3.get_object(Bucket=bucket, Key=key)
-                async with response["Body"] as stream:
-                    content = await stream.read()
-                    return content.decode("utf-8")
+                # Generate presigned URL for getting the object
+                url = await s3.generate_presigned_url(
+                    ClientMethod="get_object",
+                    Params={"Bucket": bucket, "Key": key},
+                    ExpiresIn=3600,
+                )
+
+                # Fetch content using aiohttp
+                async with aiohttp.ClientSession() as http_session:
+                    async with http_session.get(url) as response:
+                        if response.status != 200:
+                            return f"Error reading S3 object: HTTP {response.status} - {await response.text()}"
+                        content = await response.read()
+                        return content.decode("utf-8")
         except Exception as e:
             return f"Error reading S3 object: {str(e)}"
 
@@ -115,7 +126,94 @@ class AsyncS3WriteTool(BaseTool):
         session = self._get_session()
         try:
             async with session.client("s3") as s3:
-                await s3.put_object(Bucket=bucket, Key=key, Body=content.encode("utf-8"))
+                # Generate presigned URL for putting the object
+                url = await s3.generate_presigned_url(
+                    ClientMethod="put_object",
+                    Params={"Bucket": bucket, "Key": key},
+                    ExpiresIn=3600,
+                )
+
+                # Upload content using aiohttp
+                async with aiohttp.ClientSession() as http_session:
+                    async with http_session.put(url, data=content.encode("utf-8")) as response:
+                        if response.status not in (200, 201, 204):
+                            return f"Error writing S3 object: HTTP {response.status} - {await response.text()}"
+
             return f"Successfully uploaded to s3://{bucket}/{key}"
         except Exception as e:
             return f"Error writing S3 object: {str(e)}"
+
+
+class S3DeleteObjectSchema(BaseModel):
+    bucket: str = Field(..., description="The name of the S3 bucket.")
+    key: str = Field(..., description="The key (path) of the object to delete.")
+
+
+class AsyncS3DeleteObjectTool(BaseTool):
+    name: str = "S3 Delete Object (Async)"
+    description: str = "Deletes an S3 object asynchronously."
+    args_schema: Type[BaseModel] = S3DeleteObjectSchema
+    s3_config: Optional[S3Config] = Field(default=None, exclude=True)
+
+    def __init__(self, s3_config: Optional[S3Config] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.s3_config = s3_config
+
+    def _get_session(self):
+        if self.s3_config:
+            return aioboto3.Session(
+                aws_access_key_id=self.s3_config.access_key_id,
+                aws_secret_access_key=self.s3_config.secret_access_key,
+                region_name=self.s3_config.region_name,
+            )
+        return aioboto3.Session()
+
+    async def _run(self, bucket: str, key: str) -> str:
+        return await self._arun(bucket, key)
+
+    async def _arun(self, bucket: str, key: str) -> str:
+        session = self._get_session()
+        try:
+            async with session.client("s3") as s3:
+                await s3.delete_object(Bucket=bucket, Key=key)
+            return f"Successfully deleted s3://{bucket}/{key}"
+        except Exception as e:
+            return f"Error deleting S3 object: {str(e)}"
+
+
+class S3UpdateObjectSchema(BaseModel):
+    bucket: str = Field(..., description="The name of the S3 bucket.")
+    key: str = Field(..., description="The key (path) of the object to update.")
+    content: str = Field(..., description="The content to update.")
+
+
+class AsyncS3UpdateObjectTool(BaseTool):
+    name: str = "S3 Update Object (Async)"
+    description: str = "Updates an S3 object asynchronously."
+    args_schema: Type[BaseModel] = S3UpdateObjectSchema
+    s3_config: Optional[S3Config] = Field(default=None, exclude=True)
+
+    def __init__(self, s3_config: Optional[S3Config] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.s3_config = s3_config
+
+    def _get_session(self):
+        if self.s3_config:
+            return aioboto3.Session(
+                aws_access_key_id=self.s3_config.access_key_id,
+                aws_secret_access_key=self.s3_config.secret_access_key,
+                region_name=self.s3_config.region_name,
+            )
+        return aioboto3.Session()
+
+    async def _run(self, bucket: str, key: str, content: str) -> str:
+        return await self._arun(bucket, key, content)
+
+    async def _arun(self, bucket: str, key: str, content: str) -> str:
+        session = self._get_session()
+        try:
+            async with session.client("s3") as s3:
+                await s3.put_object(Bucket=bucket, Key=key, Body=content.encode("utf-8"))
+            return f"Successfully updated s3://{bucket}/{key}"
+        except Exception as e:
+            return f"Error updating S3 object: {str(e)}"

@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getAgent, saveAgent, AgentConfig, listMCPServers } from '@/lib/api';
+import {
+  getAgent,
+  saveAgent,
+  AgentConfig,
+  listMCPServers,
+  getTenantAllowedMCPServers,
+} from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,7 +55,19 @@ export default function AgentEditor({ name, onClose, onSave }: AgentEditorProps)
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    listMCPServers().then(setMcpOptions);
+    // Fetch MCP servers and filter by tenant's allowed list
+    const loadMcpOptions = async () => {
+      const allServers = await listMCPServers();
+      const allowed = await getTenantAllowedMCPServers();
+      // If allowed is empty, show all servers (no restrictions)
+      if (allowed.length > 0) {
+        setMcpOptions(allServers.filter((s) => allowed.includes(s)));
+      } else {
+        setMcpOptions(allServers);
+      }
+    };
+    loadMcpOptions();
+
     if (name) {
       const loadAgent = async () => {
         // Yield to avoid sync setState in effect

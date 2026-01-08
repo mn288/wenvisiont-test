@@ -1,0 +1,57 @@
+name: PropertyManagerMultiAgentSystem
+description: A multi-agent workflow that manages a property office end-to-end, handling
+  prospect engagement, meeting scheduling, document management, email communication,
+  and verification, with specialized agents for each task and human oversight for
+  critical decisions.
+nodes:
+- id: prospect_engagement_agent
+  type: research
+  config:
+    task: Identify and gather initial information about potential buyers or sellers
+      from public and private sources.
+- id: contact_prospects_agent
+  type: human_manager
+  config:
+    prompt: Review the prospect details and approve sending initial contact emails.
+      Confirm if outreach should proceed with the provided message draft.
+- id: schedule_meeting_agent
+  type: research
+  config:
+    task: Find available time slots for buyers/sellers and coordinate with all parties
+      to schedule a meeting.
+- id: document_updater_agent
+  type: senior_python_developer_async
+  config:
+    task: Update the prospect's digital folder with new documents, contracts, or correspondence.
+      Ensure file naming and versioning standards are followed.
+- id: email_sender_agent
+  type: research
+  config:
+    task: Compose and send personalized emails to prospects, agents, or stakeholders
+      regarding meetings, document updates, or follow-ups.
+- id: truth_verifier_agent
+  type: truth_verifier_agent
+  config:
+    verify:
+    - prospect contact details
+    - meeting times
+    - document accuracy
+    - email content
+- id: supervisor_agent
+  type: human_manager
+  config:
+    prompt: Review the completed workflow step. Approve final actions (e.g., sending
+      emails, scheduling meetings) or request corrections.
+edges:
+- source: prospect_engagement_agent
+  target: contact_prospects_agent
+- source: contact_prospects_agent
+  target: schedule_meeting_agent
+- source: schedule_meeting_agent
+  target: document_updater_agent
+- source: document_updater_agent
+  target: email_sender_agent
+- source: email_sender_agent
+  target: truth_verifier_agent
+- source: truth_verifier_agent
+  target: supervisor_agent

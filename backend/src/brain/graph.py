@@ -6,7 +6,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 from psycopg_pool import AsyncConnectionPool
 
-from src.brain.nodes import (
+from brain.nodes import (
     execute_agent_node,
     preprocess_node,
     qa_node,
@@ -14,9 +14,9 @@ from src.brain.nodes import (
     tool_execution_node,
     tool_planning_node,
 )
-from src.brain.registry import AgentRegistry
-from src.core.config import settings
-from src.models.state import GraphState
+from brain.registry import AgentRegistry
+from core.config import settings
+from models.state import GraphState
 
 
 def build_workflow() -> StateGraph:

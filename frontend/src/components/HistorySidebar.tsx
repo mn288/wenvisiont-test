@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Conversation, fetchConversations, deleteConversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Plus, Loader2, Clock, Trash2, FolderOpen, History } from 'lucide-react';
+import { MessageSquare, Plus, Loader2, Clock, Trash2 } from 'lucide-react';
 import { SettingsDrawer } from './settings/SettingsDrawer';
 import {
   AlertDialog,
@@ -31,34 +32,40 @@ export function HistorySidebar({
 }: HistorySidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'chats' | 'files'>('chats');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [threadToDelete, setThreadToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadConversations = async (retryCount = 0) => {
-    try {
-      const data = await fetchConversations();
-      setConversations(data);
-
-      // If current thread is new and not yet in the list, retry fetching
-      if (
-        currentThreadId &&
-        currentThreadId !== 'default' &&
-        !data.find((c) => c.thread_id === currentThreadId) &&
-        retryCount < 10
-      ) {
-        setTimeout(() => loadConversations(retryCount + 1), 500);
-      }
-    } catch (error) {
-      console.error('Failed to load history:', error);
-    } finally {
-      if (retryCount === 0) setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isActive = true;
+    const loadConversations = async (retryCount = 0) => {
+      if (!isActive) return;
+      try {
+        const data = await fetchConversations();
+        if (isActive) {
+          setConversations(data);
+
+          // If current thread is new and not yet in the list, retry fetching
+          if (
+            currentThreadId &&
+            currentThreadId !== 'default' &&
+            !data.find((c) => c.thread_id === currentThreadId) &&
+            retryCount < 10
+          ) {
+            setTimeout(() => loadConversations(retryCount + 1), 500);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load history:', error);
+      } finally {
+        if (isActive && retryCount === 0) setLoading(false);
+      }
+    };
     loadConversations();
+
+    return () => {
+      isActive = false;
+    };
   }, [currentThreadId]);
 
   const handleDeleteClick = (e: React.MouseEvent, threadId: string) => {
@@ -137,12 +144,12 @@ export function HistorySidebar({
         </div>
 
         <div className="border-border border-b p-2">
-          <a
-            href="/agents"
+          <Link
+            href="/studio"
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-500/20 bg-purple-600/20 py-2 text-xs font-medium text-purple-200 transition-all duration-200 hover:bg-purple-600/30 hover:text-white"
           >
             <span>🤖 Agent Studio</span>
-          </a>
+          </Link>
         </div>
 
         {/* Tabs - REMOVED FILES TAB as it's now global */}

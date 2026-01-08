@@ -12,11 +12,15 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlmodel import SQLModel
 
 from alembic import context
-from src.core.config import settings
+from core.config import settings
+from models.agents import SuperAgent  # noqa
+from models.configuration import Configuration  # noqa
 
 # Import all models to ensure they are registered with SQLModel.metadata
-
-# from src.models.sql_models import Base  # Removed
+# from models.sql_models import Base  # Removed
+from models.conversations import Conversation  # noqa
+from models.history import StepLog  # noqa
+from models.mcp import MCPServer  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
