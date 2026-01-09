@@ -1,4 +1,4 @@
-# Sfeir Backend: The "Brain" & "Crew" Hybrid Architecture
+# Agentic Backend: The "Brain" & "Crew" Hybrid Architecture
 
 > [!IMPORTANT]
 > This is not a standard CRUD backend. It is an **Agentic Orchestration Layer** designed to bridge the gap between deterministic state management (LangGraph) and autonomous task execution (CrewAI).

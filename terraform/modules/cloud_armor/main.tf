@@ -1,117 +1,60 @@
-# Cloud Armor Security Policy - WAF for Cloud Run
 
-# External IP for Load Balancer (required for Cloud Armor)
-resource "google_compute_global_address" "default" {
-  name = "global-static-ip"
-}
 
-# Cloud Armor Security Policy
-resource "google_compute_security_policy" "waf_policy" {
-  name        = "agentic-platform-waf"
-  description = "Cloud Armor WAF policy for CAC40 financial platform"
+resource "google_compute_security_policy" "policy" {
+  name = "${var.project_id}-security-policy"
+  description = "Cloud Armor security policy with OWASP rules"
 
-  # --- Default Rule: Allow ---
+  # Default Rule: Deny All (Best practice, allowlist approach) or Allow All depending on risk profile.
+  # For now, we allow all but filter attacks.
   rule {
     action   = "allow"
-    priority = 2147483647 # Lowest priority (default rule)
+    priority = "2147483647"
     match {
       versioned_expr = "SRC_IPS_V1"
       config {
         src_ip_ranges = ["*"]
       }
     }
-    description = "Default allow rule"
+    description = "Default rule, allow everything."
   }
 
-  # --- OWASP Core Rule Set: SQL Injection ---
+  # OWASP Top 10 - SQL Injection
   rule {
     action   = "deny(403)"
-    priority = 1000
+    priority = "1000"
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
+        expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
       }
     }
-    description = "Block SQL Injection attacks (OWASP CRS)"
+    description = "SQL Injection Protection"
   }
 
-  # --- OWASP Core Rule Set: XSS ---
+  # OWASP Top 10 - XSS
   rule {
     action   = "deny(403)"
-    priority = 1001
+    priority = "1001"
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('xss-v33-stable', {'sensitivity': 1})"
+        expression = "evaluatePreconfiguredExpr('xss-v33-stable')"
       }
     }
-    description = "Block XSS attacks (OWASP CRS)"
+    description = "XSS Protection"
   }
-
-  # --- OWASP Core Rule Set: LFI ---
+  
+  # LFI/RFI
   rule {
     action   = "deny(403)"
-    priority = 1002
+    priority = "1002"
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('lfi-v33-stable', {'sensitivity': 1})"
+       expression = "evaluatePreconfiguredExpr('lfi-v33-stable') || evaluatePreconfiguredExpr('rfi-v33-stable')"
       }
     }
-    description = "Block Local File Inclusion attacks"
+    description = "LFI/RFI Protection"
   }
-
-  # --- OWASP Core Rule Set: RCE ---
-  rule {
-    action   = "deny(403)"
-    priority = 1003
-    match {
-      expr {
-        expression = "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1})"
-      }
-    }
-    description = "Block Remote Code Execution attacks"
-  }
-
-  # --- Rate Limiting (Throttle) ---
-  rule {
-    action   = "throttle"
-    priority = 2000
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-    rate_limit_options {
-      conform_action   = "allow"
-      exceed_action    = "deny(429)"
-      rate_limit_threshold {
-        count = 100
-        interval_sec = 60
-      }
-    }
-    description = "Rate limit: 100 requests per minute per IP"
-  }
-
-  # --- Geo Blocking (Optional - Example: Block specific regions) ---
-  # Uncomment and configure as needed for compliance
-  # rule {
-  #   action   = "deny(403)"
-  #   priority = 500
-  #   match {
-  #     expr {
-  #       expression = "origin.region_code == 'RU' || origin.region_code == 'CN'"
-  #     }
-  #   }
-  #   description = "Block traffic from specific geo regions"
-  # }
 }
 
-output "waf_policy_id" {
-  value       = google_compute_security_policy.waf_policy.id
-  description = "Cloud Armor WAF Policy ID"
-}
-
-output "global_static_ip" {
-  value       = google_compute_global_address.default.address
-  description = "Global Static IP for Load Balancer"
+output "policy_id" {
+  value = google_compute_security_policy.policy.id
 }

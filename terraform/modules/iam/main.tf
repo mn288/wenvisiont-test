@@ -67,3 +67,40 @@ resource "google_cloud_run_service_iam_member" "frontend_can_invoke_backend" {
   role     = "roles/run.invoker"
   member   = "serviceAccount:${var.frontend_sa_email}"
 }
+
+# -------------------------------------------------------------------------
+# CI/CD: GitHub Actions Permissions
+# -------------------------------------------------------------------------
+variable "github_sa_email" {
+  description = "GitHub Actions Service Account Email"
+  type        = string
+  default     = "" # Optional if not using CI/CD
+}
+
+resource "google_project_iam_member" "github_secret_accessor" {
+  count   = var.github_sa_email != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${var.github_sa_email}"
+}
+
+resource "google_project_iam_member" "github_run_admin" {
+  count   = var.github_sa_email != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${var.github_sa_email}"
+}
+
+resource "google_project_iam_member" "github_sa_user" {
+  count   = var.github_sa_email != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${var.github_sa_email}"
+}
+
+resource "google_project_iam_member" "github_artifact_admin" {
+  count   = var.github_sa_email != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/artifactregistry.admin" # To push images
+  member  = "serviceAccount:${var.github_sa_email}"
+}

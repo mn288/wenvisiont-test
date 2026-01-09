@@ -9,18 +9,30 @@ variable "region" {
   default     = "europe-west9"
 }
 
-variable "db_password" {
-  description = "Database Password"
+
+
+
+
+variable "zone" {
+  description = "GCP Zone (e.g., europe-west9-a)"
   type        = string
-  sensitive   = true
+  default     = "europe-west9-a"
 }
 
-variable "backend_image" {
-  description = "Container image for the backend"
+variable "domain_name" {
+  description = "Domain name for the load balancer (optional)"
   type        = string
+  default     = ""
 }
 
-variable "frontend_image" {
-  description = "Container image for the frontend"
+variable "ssl_certificate_id" {
+  description = "Existing SSL Certificate ID (optional)"
   type        = string
+  default     = ""
+}
+
+variable "github_repo" {
+  description = "GitHub Repository for CI/CD (owner/repo)"
+  type        = string
+  default     = ""
 }

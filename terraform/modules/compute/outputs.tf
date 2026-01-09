@@ -19,3 +19,13 @@ output "frontend_url" {
   value       = google_cloud_run_v2_service.frontend.uri
   description = "URL of the frontend Cloud Run service"
 }
+
+output "backend_neg_id" {
+  value       = google_compute_region_network_endpoint_group.backend_neg.id
+  description = "ID of the backend Serverless NEG"
+}
+
+output "frontend_neg_id" {
+  value       = google_compute_region_network_endpoint_group.frontend_neg.id
+  description = "ID of the frontend Serverless NEG"
+}

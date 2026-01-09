@@ -1,4 +1,4 @@
-# Sfeir Frontend: Agentic UX & The "Glass Box" Interface
+# Agentic Frontend: Agentic UX & The "Glass Box" Interface
 
 > [!NOTE]
 > This is not a chatbot. This is a **Thinking Visualization Engine**.

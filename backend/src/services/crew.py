@@ -27,10 +27,9 @@ class CrewService:
             raise ValueError(f"Agent {agent_name} not found in registry")
 
         # 2. Prepare Inputs
-        # We merge the specific task input with global context
         inputs = {
-            "request": task.input_data,  # The specific instruction
-            "research_output": context,  # Global context (legacy name in templates is research_output often)
+            "request": task.input_data,
+            "research_output": context,
         }
 
         # 3. Create Crew
@@ -47,14 +46,7 @@ class CrewService:
         result_raw = await crew.akickoff()
         result_str = str(result_raw)
 
-        # 5. Summarize (Optional, but good for Industrial flows to keep context clean)
-        # We can implement summarization here or reuse a helper.
-        # For now, let's keep it direct.
         summary = result_str[:500] + "..." if len(result_str) > 500 else result_str
-
-        # 6. Return Typed Result
-        # 6. Return Typed Result
-        # Extract token usage if available (CrewAI Output usually has user_id, raw, etc. check for usage)
         token_usage = getattr(result_raw, "token_usage", {})
 
         return AgentResult(

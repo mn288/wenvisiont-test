@@ -1,0 +1,61 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: "read"
+  id-token: "write"
+
+env:
+  PROJECT_ID: "${{ secrets.GCP_PROJECT_ID }}"
+  REGION: "europe-west9"
+  SERVICE_NAME: "backend"
+  WIF_PROVIDER: "${{ secrets.GCP_WIF_PROVIDER }}" # projects/12345/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  WIF_SERVICE_ACCOUNT: "${{ secrets.GCP_WIF_SA_EMAIL }}"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.WIF_SERVICE_ACCOUNT }}"
+
+      - name: Get Secrets from Secret Manager
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            DB_PASSWORD:${{ env.PROJECT_ID }}/db-password
+            OPENAI_API_KEY:${{ env.PROJECT_ID }}/openai-api-key
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Container
+        run: |-
+          docker build -t "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}" .
+          docker push "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+
+      - name: Deploy to Cloud Run
+        run: |-
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}" \
+            --region=${{ env.REGION }} \
+            --service-account=${{ env.WIF_SERVICE_ACCOUNT }} \
+            --set-env-vars="DB_PASSWORD=${{ steps.secrets.outputs.DB_PASSWORD }}" \
+            --set-env-vars="OPENAI_API_KEY=${{ steps.secrets.outputs.OPENAI_API_KEY }}" \
+            --quiet

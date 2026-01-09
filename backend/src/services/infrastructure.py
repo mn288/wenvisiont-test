@@ -11,7 +11,7 @@ from models.infrastructure import InfrastructureConfig, S3Config
 class InfrastructureService:
     # Write to /tmp instead of project workspace
     # Maintain the same folder structure for each thread
-    BASE_WORKSPACE = "/tmp/sfeir/workspace"
+    BASE_WORKSPACE = "/tmp/mnabaa/workspace"
 
     def get_or_create_infrastructure(self, thread_id: str) -> InfrastructureConfig:
         """

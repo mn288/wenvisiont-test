@@ -12,7 +12,7 @@ resource "google_service_account" "frontend_sa" {
 resource "google_cloud_run_v2_service" "backend" {
   name     = "backend"
   location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
   template {
     service_account = google_service_account.backend_sa.email
@@ -29,8 +29,6 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "API_V1_STR"
         value = "/api/v1"
       }
-
-      # Add other env vars here or link to Secret Manager
     }
 
     vpc_access {
@@ -43,11 +41,10 @@ resource "google_cloud_run_v2_service" "backend" {
   }
 }
 
-# Frontend Service
 resource "google_cloud_run_v2_service" "frontend" {
   name     = "frontend"
   location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
   template {
     service_account = google_service_account.frontend_sa.email
@@ -57,7 +54,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       
       env {
         name  = "NEXT_PUBLIC_API_URL"
-        value = google_cloud_run_v2_service.backend.uri
+        value = "/api" # Relative path when behind LB
       }
     }
     
@@ -71,25 +68,24 @@ resource "google_cloud_run_v2_service" "frontend" {
   }
 }
 
-# Allow unauthenticated access for demo purposes (Restrict in real production behind LB)
-data "google_iam_policy" "noauth" {
-  binding {
-    role    = "roles/run.invoker"
-    members = ["allUsers"]
+# Network Endpoint Groups (NEGs)
+
+resource "google_compute_region_network_endpoint_group" "backend_neg" {
+  name                  = "backend-neg"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+  cloud_run {
+    service = google_cloud_run_v2_service.backend.name
   }
 }
 
-resource "google_cloud_run_service_iam_policy" "frontend_noauth" {
-  location = google_cloud_run_v2_service.frontend.location
-  project  = google_cloud_run_v2_service.frontend.project
-  service  = google_cloud_run_v2_service.frontend.name
-  policy_data = data.google_iam_policy.noauth.policy_data
+resource "google_compute_region_network_endpoint_group" "frontend_neg" {
+  name                  = "frontend-neg"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+  cloud_run {
+    service = google_cloud_run_v2_service.frontend.name
+  }
 }
 
-# Backend is usually private or behind API Gateway, but for now allowing public
-resource "google_cloud_run_service_iam_policy" "backend_noauth" {
-  location = google_cloud_run_v2_service.backend.location
-  project  = google_cloud_run_v2_service.backend.project
-  service  = google_cloud_run_v2_service.backend.name
-  policy_data = data.google_iam_policy.noauth.policy_data
-}
+

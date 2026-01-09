@@ -21,3 +21,9 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+variable "kms_key_name" {
+  description = "KMS Key Name for CMEK"
+  type        = string
+  default     = null
+}

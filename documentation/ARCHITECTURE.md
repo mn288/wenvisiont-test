@@ -1,6 +1,6 @@
 # Technical Architecture & Flow
 
-This document outlines the technical infrastructure and data flow architecture of the Sfeir Agentic Platform.
+This document outlines the technical infrastructure and data flow architecture of the Mnabaa Agentic Platform.
 
 ## High-Levels Architecture
 
@@ -157,7 +157,7 @@ sequenceDiagram
 
 ### 5. Infrastructure Layer
 
-- **Workspace**: Sandboxed directories in `/tmp/sfeir/workspace/{thread_id}`.
+- **Workspace**: Sandboxed directories in `/tmp/mnabaa/workspace/{thread_id}`.
 - **Persistence**:
   - **Structured Data**: PostgreSQL (`conversations`, `step_logs`).
   - **Unstructured Data**: Local Filesystem / S3.
