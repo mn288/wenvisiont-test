@@ -61,8 +61,8 @@ export const SettingsDrawer = () => {
   const loadInfraConfig = async () => {
     try {
       const config = await getConfiguration('infrastructure_config');
-      if (config) {
-        setInfraConfigText(config.value);
+      if (config && config.value) {
+        setInfraConfigText(String(config.value));
       }
     } catch (e) {
       console.error(e);
@@ -74,7 +74,7 @@ export const SettingsDrawer = () => {
     try {
       await saveConfiguration('infrastructure_config', infraConfigText);
       alert('Configuration saved!');
-    } catch (e) {
+    } catch {
       alert('Failed to save configuration');
     } finally {
       setInfraLoading(false);

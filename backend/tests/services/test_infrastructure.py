@@ -39,7 +39,7 @@ def test_get_or_create_infrastructure_local(mock_fs):
 
     infra = service.get_or_create_infrastructure("t1")
 
-    expect(infra.local_workspace_path).to(contain("/tmp/sfeir/workspace/t1"))
+    expect(infra.local_workspace_path).to(contain("/tmp/wenvision/workspace/t1"))
     expect(MockOS.makedirs.called).to(be_true)
     expect(infra.s3_config).to(be(None))
 
@@ -90,7 +90,7 @@ def test_read_file_success(mock_fs):
     service = InfrastructureService()
 
     # Mock validation
-    MockOS.path.abspath.return_value = "/tmp/sfeir/workspace/t1/f1.txt"
+    MockOS.path.abspath.return_value = "/tmp/wenvision/workspace/t1/f1.txt"
     MockOS.path.exists.return_value = True
 
     mock_file = MagicMock()
@@ -110,7 +110,7 @@ def test_read_file_access_denied(mock_fs):
     MockOS.path.abspath.return_value = "/etc/passwd"
 
     # We must ensure workspace path is resolved correctly to compare
-    # Mocking os.path.abspath(workspace) -> /tmp/sfeir/workspace/t1
+    # Mocking os.path.abspath(workspace) -> /tmp/wenvision/workspace/t1
     # Mocking os.path.abspath(target) -> /etc/passwd
     # Logic: if not target.startswith(workspace)...
 
@@ -122,7 +122,7 @@ def test_read_file_access_denied(mock_fs):
         # causing the startswith check to fail.
         if "passwd" in path:
             return "/etc/passwd"
-        return "/tmp/sfeir/workspace/t1"
+        return "/tmp/wenvision/workspace/t1"
 
     MockOS.path.abspath.side_effect = abspath_side_effect
 
@@ -217,10 +217,10 @@ def test_read_file_not_found(mock_fs):
 
     # Valid path in workspace, but file missing
     # We must ensure abspath resolves correctly to pass validation
-    MockOS.path.abspath.return_value = "/tmp/sfeir/workspace/t1/missing.txt"
+    MockOS.path.abspath.return_value = "/tmp/wenvision/workspace/t1/missing.txt"
 
     # Validation logic:
-    # target = os.path.abspath(...) -> /tmp/sfeir/workspace/t1/missing.txt (mocked above)
+    # target = os.path.abspath(...) -> /tmp/wenvision/workspace/t1/missing.txt (mocked above)
     # workspace = ...
     # if not target.startswith(...) -> passed
     # if not os.path.exists(target) -> failed

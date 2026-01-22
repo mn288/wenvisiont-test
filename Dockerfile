@@ -17,6 +17,8 @@ RUN uv sync --frozen --no-install-project
 # Runner stage
 FROM python:3.12-slim AS runner
 
+RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/backend
 
 # Copy virtual env from builder
@@ -27,7 +29,7 @@ COPY backend/src /app/backend/src
 
 # Set environment
 ENV PATH="/app/backend/.venv/bin:$PATH"
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/backend/src
 
 # Command to run the application
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -14,7 +14,6 @@ import {
   Lock,
   ArrowDownCircle,
   Copy,
-  Trash2,
   Maximize2,
   Minimize2,
 } from 'lucide-react';

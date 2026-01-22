@@ -2,7 +2,6 @@ import ReactMarkdown from 'react-markdown';
 import { Copy, Check, FileText, Download } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { clsx } from 'clsx';
 
 interface ReportViewProps {
   content: string;

@@ -285,7 +285,7 @@ export default function Home() {
               <Menu size={24} />
             </button>
             <div className="bg-primary/20 border-primary/30 shadow-glow relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg border">
-              <Image src="/sfeir-logo.png" alt="Sfeir Logo" fill className="object-cover p-1" />
+              <Image src="/logo.png" alt="wenvision Logo" fill className="object-cover p-1" />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white/90 md:text-xl">

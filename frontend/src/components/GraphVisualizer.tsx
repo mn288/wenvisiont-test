@@ -1,24 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
   Edge,
   Node,
-  ReactFlowProvider,
   useNodesState,
   useEdgesState,
-  MarkerType,
   Handle,
   Position,
   NodeProps,
-  EdgeProps,
-  BaseEdge,
-  getBezierPath,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { clsx } from 'clsx';
-import { motion } from 'framer-motion';
 import {
   Activity,
   Brain,
@@ -30,7 +24,6 @@ import {
   Search,
   ShieldCheck,
   CheckCircle2,
-  Clock,
   AlertCircle,
 } from 'lucide-react';
 import { VisitedNode } from '@/lib/state-utils';
@@ -102,7 +95,7 @@ const getIconForNode = (label: string) => {
 // --- Custom Components ---
 
 const CustomNode = React.memo(({ data, id }: NodeProps) => {
-  const Icon = getIconForNode(data.label);
+  const IconComponent = getIconForNode(data.label);
   const isRunning = data.status === 'running';
   const isCompleted = data.status === 'completed';
   const isFailed = data.status === 'failed';
@@ -134,7 +127,7 @@ const CustomNode = React.memo(({ data, id }: NodeProps) => {
           isCompleted && !isActive && 'bg-green-500/10 text-green-400'
         )}
       >
-        <Icon size={20} />
+        {React.createElement(IconComponent, { size: 20 })}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -190,6 +183,7 @@ const CustomNode = React.memo(({ data, id }: NodeProps) => {
     </div>
   );
 });
+CustomNode.displayName = 'CustomNode';
 
 // --- Main Component ---
 

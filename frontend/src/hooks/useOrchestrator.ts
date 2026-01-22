@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { LogEntry, fetchStepHistory, fetchTopology } from '@/lib/api';
 import { reconstructStateFromLogs, VisitedNode } from '@/lib/state-utils';
 
-const THREAD_ID_STORAGE_KEY = 'sfeir_active_thread_id';
+const THREAD_ID_STORAGE_KEY = 'wenvision_active_thread_id';
 
 export const useOrchestrator = () => {
   const [input, setInput] = useState('');
@@ -73,10 +73,10 @@ export const useOrchestrator = () => {
       if (threadId && threadId !== 'default') {
         try {
           const [logs, topology] = await Promise.all([
-             fetchStepHistory(threadId),
-             fetchTopology(threadId)
+            fetchStepHistory(threadId),
+            fetchTopology(threadId),
           ]);
-          
+
           if (logs.length > 0 || topology.length > 0) {
             const {
               logs: restoredLogs,
@@ -157,7 +157,7 @@ export const useOrchestrator = () => {
                 ...prev,
                 [node]: newContent,
               };
-              
+
               // NEW: Real-time update of finalResponse for feedback nodes
               if (node === 'qa' || node === 'preprocess') {
                 setFinalResponse(newContent);
@@ -215,41 +215,44 @@ export const useOrchestrator = () => {
               // 1. Check if we already have this exact node (by step name + checkpoint if available)
               // 2. Only dedupe if the last node is STILL RUNNING and matches
               // 3. Allow fork nodes (same name but different checkpoint/parent context)
-              
+
               const lastNode = prev.length > 0 ? prev[prev.length - 1] : null;
-              
+
               // Quick dedupe: if last node is running with same name, update it
               if (lastNode && lastNode.id === node && lastNode.status === 'running') {
-                 // Update existing running node with input if it was missing
-                 if (parsed.input && !lastNode.input) {
-                   const updated = [...prev];
-                   updated[updated.length - 1] = {
-                       ...updated[updated.length - 1],
-                       input: parsed.input,
-                   };
-                   return updated;
-                 }
-                 return prev;
+                // Update existing running node with input if it was missing
+                if (parsed.input && !lastNode.input) {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    ...updated[updated.length - 1],
+                    input: parsed.input,
+                  };
+                  return updated;
+                }
+                return prev;
               }
-              
+
               // Check if we already have a completed node with the same step_name
               // that might be from existing topology (not from streaming)
               // We should still add the new one if it's a fork/rerun
               // The parent_checkpoint_id will be different, so it's legitimate
-              
+
               const timestamp = Date.now();
               // Temporary uid based on timestamp, gets updated with checkpoint_id later
               const uid = `${node}_${timestamp}`;
-              
-              return [...prev, { 
-                id: node, 
-                label, 
-                timestamp,
-                input: parsed.input,
-                status: 'running',
-                parentCheckpointId: parsed.parent_checkpoint_id,
-                uid,
-              }];
+
+              return [
+                ...prev,
+                {
+                  id: node,
+                  label,
+                  timestamp,
+                  input: parsed.input,
+                  status: 'running',
+                  parentCheckpointId: parsed.parent_checkpoint_id,
+                  uid,
+                },
+              ];
             });
           } else if (parsed.type === 'node_end') {
             const node = parsed.node;
@@ -258,68 +261,67 @@ export const useOrchestrator = () => {
 
             // Update visited node with output and completions status
             setVisitedNodes((prev) => {
-                const newVisited = [...prev];
-                const lastIndex = newVisited.map(n => n.id).lastIndexOf(node);
-                if (lastIndex !== -1) {
-                    newVisited[lastIndex] = {
-                        ...newVisited[lastIndex],
-                        output: parsed.output,
-                        status: 'completed'
-                    };
-                }
-                return newVisited;
+              const newVisited = [...prev];
+              const lastIndex = newVisited.map((n) => n.id).lastIndexOf(node);
+              if (lastIndex !== -1) {
+                newVisited[lastIndex] = {
+                  ...newVisited[lastIndex],
+                  output: parsed.output,
+                  status: 'completed',
+                };
+              }
+              return newVisited;
             });
 
-
-            if ((node === 'qa' || node === 'preprocess')) {
+            if (node === 'qa' || node === 'preprocess') {
               // Prefer constructed streamed content if available (matches refresh logic)
               if (streamedContent[node]) {
-                  setFinalResponse(streamedContent[node]);
+                setFinalResponse(streamedContent[node]);
               } else if (parsed.output) {
-                  // Fallback to parsed output logic
-                  let outputStr = parsed.output;
-                  
-                  // If output is an object, extract the actual text content
-                  if (typeof parsed.output === 'object') {
-                    // Try to find text content in common field names
-                    if (parsed.output.output) {
-                      outputStr = parsed.output.output;
-                    } else if (parsed.output.content) {
-                      outputStr = parsed.output.content;
-                    } else if (parsed.output.text) {
-                      outputStr = parsed.output.text;
-                    } else if (parsed.output.result) {
-                      outputStr = parsed.output.result;
-                    } else {
-                      // Fallback: stringify as JSON only if we can't find text content
-                      outputStr = "```json\n" + JSON.stringify(parsed.output, null, 2) + "\n```";
-                    }
+                // Fallback to parsed output logic
+                let outputStr = parsed.output;
+
+                // If output is an object, extract the actual text content
+                if (typeof parsed.output === 'object') {
+                  // Try to find text content in common field names
+                  if (parsed.output.output) {
+                    outputStr = parsed.output.output;
+                  } else if (parsed.output.content) {
+                    outputStr = parsed.output.content;
+                  } else if (parsed.output.text) {
+                    outputStr = parsed.output.text;
+                  } else if (parsed.output.result) {
+                    outputStr = parsed.output.result;
+                  } else {
+                    // Fallback: stringify as JSON only if we can't find text content
+                    outputStr = '```json\n' + JSON.stringify(parsed.output, null, 2) + '\n```';
                   }
-                  
-                  setFinalResponse(outputStr);
+                }
+
+                setFinalResponse(outputStr);
               }
             }
           } else if (parsed.type === 'checkpoint') {
-             // Dedicated checkpoint event to update IDs
-             const { node, checkpoint_id, parent_checkpoint_id } = parsed;
-             setVisitedNodes((prev) => {
-                 const newVisited = [...prev];
-                 // Find the last instance of this node (it just finished)
-                 const lastIndex = newVisited.map(n => n.id).lastIndexOf(node);
-                 if (lastIndex !== -1) {
-                     // Update uid to use checkpoint_id for stable identification
-                     const newUid = checkpoint_id 
-                       ? `${node}_${checkpoint_id}` 
-                       : newVisited[lastIndex].uid;
-                     newVisited[lastIndex] = {
-                         ...newVisited[lastIndex],
-                         checkpoint_id: checkpoint_id,
-                         parentCheckpointId: parent_checkpoint_id,
-                         uid: newUid,
-                     };
-                 }
-                 return newVisited;
-             });
+            // Dedicated checkpoint event to update IDs
+            const { node, checkpoint_id, parent_checkpoint_id } = parsed;
+            setVisitedNodes((prev) => {
+              const newVisited = [...prev];
+              // Find the last instance of this node (it just finished)
+              const lastIndex = newVisited.map((n) => n.id).lastIndexOf(node);
+              if (lastIndex !== -1) {
+                // Update uid to use checkpoint_id for stable identification
+                const newUid = checkpoint_id
+                  ? `${node}_${checkpoint_id}`
+                  : newVisited[lastIndex].uid;
+                newVisited[lastIndex] = {
+                  ...newVisited[lastIndex],
+                  checkpoint_id: checkpoint_id,
+                  parentCheckpointId: parent_checkpoint_id,
+                  uid: newUid,
+                };
+              }
+              return newVisited;
+            });
           } else if (parsed.type === 'interrupt') {
             eventSource.close();
             eventSourceRef.current = null;
@@ -335,28 +337,29 @@ export const useOrchestrator = () => {
             if (parsed.next && parsed.next.includes('qa')) {
               setActiveNodes(['qa']);
               setActiveAgent('Quality Assurance');
-              
+
               // Display QA preview content if available
               if (parsed.qa_preview) {
                 const preview = parsed.qa_preview;
                 let previewContent = '## Quality Check Ready\n\n';
                 previewContent += '### Aggregated Findings:\n\n';
-                
+
                 if (preview.results && preview.results.length > 0) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   preview.results.forEach((result: any) => {
                     const role = result.metadata?.agent_role || 'Agent';
                     previewContent += `**${role}:**\n${result.summary}\n\n`;
                   });
                 }
-                
+
                 if (preview.context) {
                   previewContent += `\n### Additional Context:\n${preview.context}\n`;
                 }
-                
+
                 // Store preview as streamed content for QA node
                 setStreamedContent((prev) => ({
                   ...prev,
-                  qa: previewContent
+                  qa: previewContent,
                 }));
               }
             }
