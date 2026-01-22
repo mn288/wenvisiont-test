@@ -270,7 +270,6 @@ dependencies = [
     { name = "fastmcp" },
     { name = "langchain" },
     { name = "langchain-openai" },
-    { name = "langfuse", extra = ["langchain"] },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "orjson" },
@@ -298,9 +297,8 @@ requires-dist = [
     { name = "crewai", specifier = ">=1.7.2" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "fastmcp", specifier = ">=2.12.5" },
-    { name = "langchain", specifier = ">=0.3.0" },
+    { name = "langchain", specifier = ">=1.2.0" },
     { name = "langchain-openai", specifier = ">=0.3.0" },
-    { name = "langfuse", extras = ["langchain"], specifier = "==2.60.2" },
     { name = "langgraph", specifier = ">=1.0.5" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.2" },
     { name = "orjson", specifier = ">=3.11.5" },
@@ -1632,30 +1630,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ae/67/228dc28b4498ea16422577013b5bb4ba35a1b99f8be975d6747c7a9f7e6a/langchain_openai-1.1.6.tar.gz", hash = "sha256:e306612654330ae36fb6bbe36db91c98534312afade19e140c3061fe4208dac8", size = 1038310, upload-time = "2025-12-18T17:58:52.84Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/5b/1f6521df83c1a8e8d3f52351883b59683e179c0aa1bec75d0a77a394c9e7/langchain_openai-1.1.6-py3-none-any.whl", hash = "sha256:c42d04a67a85cee1d994afe400800d2b09ebf714721345f0b651eb06a02c3948", size = 84701, upload-time = "2025-12-18T17:58:51.527Z" },
-]
-
-[[package]]
-name = "langfuse"
-version = "2.60.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "backoff" },
-    { name = "httpx" },
-    { name = "idna" },
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "requests" },
-    { name = "wrapt" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/06/54/8f7888631843e1b8af9c96a021f7913068af8972d9dfa9ffdcda7774c3b5/langfuse-2.60.2.tar.gz", hash = "sha256:b63cba99c24358b3ec4bde63fb76c2825d162c4f5670862e6be43b9dafb530d9", size = 152439, upload-time = "2025-03-24T12:44:11.696Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/64/58eb43a7a21e0aeabb004703834b242f1538e0daac1058a3b6f8b5f1d110/langfuse-2.60.2-py3-none-any.whl", hash = "sha256:749c875b808a386fe4608f6ffa44474bb6f984b3a510596e1fb1a49f8c973064", size = 274986, upload-time = "2025-03-24T12:44:09.442Z" },
-]
-
-[package.optional-dependencies]
-langchain = [
-    { name = "langchain" },
 ]
 
 [[package]]
