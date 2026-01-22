@@ -3,6 +3,7 @@ services:
     build: .
     volumes:
       - ./backend/src:/app/backend/src
+      - ./data/workspace:/app/data/workspace
     ports:
       - "8000:8000"
     env_file:

@@ -9,9 +9,9 @@ from models.infrastructure import InfrastructureConfig, S3Config
 
 
 class InfrastructureService:
-    # Write to /tmp instead of project workspace
+    # Persist workspace data - this path will be mounted as a Docker volume
     # Maintain the same folder structure for each thread
-    BASE_WORKSPACE = "/tmp/mnabaa/workspace"
+    BASE_WORKSPACE = "/app/data/workspace"
 
     def get_or_create_infrastructure(self, thread_id: str) -> InfrastructureConfig:
         """
