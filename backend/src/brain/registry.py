@@ -5,7 +5,7 @@ from crewai import Agent, Task
 from pydantic import BaseModel, Field
 
 from core.database import pool
-from crew.agents import llm
+from crew.agents import get_llm, llm
 from models.infrastructure import InfrastructureConfig
 
 # -------------------------------------------------------------------------
@@ -23,6 +23,17 @@ class AgentConfig(BaseModel):
     mcp_servers: List[str] = Field(default_factory=list)
     files_access: bool = False
     s3_access: bool = False
+    # CrewAI 2025 parameters
+    max_iter: int = 1
+    max_retry_limit: int = 1
+    max_execution_time: Optional[int] = 30
+    respect_context_window: bool = True
+    inject_date: bool = True
+    # DyLAN-style dynamic agent selection (arXiv:2310.02170)
+    importance_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Agent importance weight for routing")
+    task_domains: List[str] = Field(default_factory=list, description="Domain keywords e.g. ['code', 'research', 'analysis']")
+    success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Historical task success rate")
+    use_reflection: bool = Field(default=False, description="Enable self-correction/reflection step")
 
 
 class TaskConfig(BaseModel):
@@ -109,6 +120,27 @@ class AgentRegistry:
                 await cur.execute("DELETE FROM superagents WHERE name = %s", (name,))
             await conn.commit()
 
+    async def update_agent_success_rate(self, name: str, success: bool, alpha: float = 0.1):
+        """
+        Update agent success_rate using exponential moving average (DyLAN feedback loop).
+        
+        Args:
+            name: Agent name
+            success: Whether the task succeeded
+            alpha: Learning rate (0.1 = slow adaptation, 0.5 = fast adaptation)
+        """
+        config = self.get_config(name)
+        if not config:
+            return
+        
+        # Exponential moving average: new_rate = alpha * outcome + (1 - alpha) * old_rate
+        outcome = 1.0 if success else 0.0
+        new_rate = alpha * outcome + (1 - alpha) * config.agent.success_rate
+        config.agent.success_rate = round(new_rate, 2)
+        
+        # Persist updated config
+        await self.save_agent(config)
+
     def reload(self):
         """
         Reload the registry.
@@ -166,7 +198,12 @@ class AgentRegistry:
         """
         return [name for name in node_names if name not in self._agents]
 
-    async def create_agent(self, name: str, infra: Optional[InfrastructureConfig] = None) -> Optional[Agent]:
+    async def create_agent(
+        self,
+        name: str,
+        infra: Optional[InfrastructureConfig] = None,
+        callbacks: List[Any] | None = None,
+    ) -> Optional[Agent]:
         """Instantiate a CrewAI Agent from config."""
         config = self.get_config(name)
         if not config:
@@ -213,14 +250,23 @@ class AgentRegistry:
             agent_tools.append(AsyncS3WriteTool(s3_config=s3_conf))
         print(f"DEBUG: Creating agent {name} with tools: {[t.name for t in agent_tools]}")
 
+        # Instantiate LLM with callbacks if provided
+        agent_llm = get_llm(callbacks) if callbacks else llm
+
         return Agent(
             role=config.agent.role,
             goal=config.agent.goal,
             backstory=config.agent.backstory,
             verbose=config.agent.verbose,
-            allow_delegation=config.agent.allow_delegation,
-            llm=llm,
+            allow_delegation=False,  # CRITICAL: Force False to prevent competing orchestration
+            llm=agent_llm,
             tools=agent_tools,
+            # New CrewAI 2025 parameters
+            max_iter=config.agent.max_iter,
+            max_retry_limit=config.agent.max_retry_limit,
+            max_execution_time=config.agent.max_execution_time,
+            respect_context_window=config.agent.respect_context_window,
+            inject_date=config.agent.inject_date,
         )
 
     def create_task(self, name: str, agent: Agent, inputs: Dict[str, Any] = {}) -> Optional[Task]:

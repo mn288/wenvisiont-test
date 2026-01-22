@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
-from api.middleware import get_current_role
+from api.middleware import get_current_role, get_current_user_id
 from core.database import pool
 from services.graph_service import GraphService
 
@@ -28,11 +28,11 @@ def orjson_dumps(obj):
     return orjson.dumps(obj, default=_default_serializer).decode("utf-8")
 
 
-async def run_bg_graph(thread_id: str, input_request: str):
+async def run_bg_graph(thread_id: str, input_request: str, user_id: str):
     """Background task to run the graph."""
     try:
         graph = await GraphService.get_instance().get_graph()
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
         initial_state = {"input_request": input_request}
         await graph.ainvoke(initial_state, config=config)
     except Exception as e:
@@ -45,6 +45,7 @@ async def create_job(
     background_tasks: BackgroundTasks = None,
     thread_id: str = "default",
     role: str = Depends(get_current_role),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Asynchronous Job Submission.
@@ -69,7 +70,7 @@ async def create_job(
     except Exception as e:
         print(f"Failed to save conversation: {e}")
 
-    background_tasks.add_task(run_bg_graph, thread_id, input_request)
+    background_tasks.add_task(run_bg_graph, thread_id, input_request, user_id)
 
     return {
         "job_id": thread_id,
@@ -150,6 +151,20 @@ async def stream(
             if initial_state and initial_state.config:
                 latest_checkpoint_id = initial_state.config["configurable"].get("checkpoint_id")
 
+            # Optimization: Instantiate Registry ONCE
+            from brain.registry import AgentRegistry
+            registry = AgentRegistry()
+            # Cache the valid node names
+            dynamic_agents = [agent.name for agent in registry.get_all()]
+            valid_nodes = [
+                "preprocess",
+                "router",
+                "supervisor",
+                "tool_planning",
+                "tool_execution",
+                "qa",
+            ] + dynamic_agents
+
             # Using astream_events for granular updates
             async for event in graph.astream_events(input_data, config=config, version="v2"):
                 kind = event["event"]
@@ -160,7 +175,11 @@ async def stream(
                     if content:
                         metadata = event.get("metadata", {})
                         node = metadata.get("langgraph_node", "")
-
+                        
+                        # Fallback if node is missing (often true for CrewAI internal chains)
+                        # We try to infer from the last known active node if we are in a node execution context
+                        # But strictly, we should just report what we have.
+                        
                         payload = orjson_dumps({"type": "token", "content": content, "node": node})
                         yield f"data: {payload}\n\n"
 
@@ -168,23 +187,13 @@ async def stream(
                 elif kind == "on_chain_start":
                     node_name = event["name"]
 
-                    from brain.registry import AgentRegistry
-
-                    registry = AgentRegistry()
-                    dynamic_agents = [agent.name for agent in registry.get_all()]
-
-                    valid_nodes = [
-                        "preprocess",
-                        "router",
-                        "supervisor",
-                        "tool_planning",
-                        "tool_execution",
-                        "qa",
-                    ] + dynamic_agents
-
                     if node_name in valid_nodes:
                         input_data_node = event["data"].get("input")
-                        payload = {"type": "node_start", "node": node_name}
+                        payload = {
+                            "type": "node_start",
+                            "node": node_name,
+                            "thread_id": thread_id,  # Pass back thread_id as trace_id
+                        }
                         if input_data_node:
                             payload["input"] = input_data_node
 
@@ -197,20 +206,6 @@ async def stream(
                 elif kind == "on_chain_end":
                     node_name = event["name"]
 
-                    from brain.registry import AgentRegistry
-
-                    registry = AgentRegistry()
-                    dynamic_agents = [agent.name for agent in registry.get_all()]
-
-                    valid_nodes = [
-                        "preprocess",
-                        "router",
-                        "supervisor",
-                        "tool_planning",
-                        "tool_execution",
-                        "qa",
-                    ] + dynamic_agents
-
                     if node_name in valid_nodes:
                         payload_dict = {"type": "node_end", "node": node_name}
 
@@ -219,6 +214,12 @@ async def stream(
                             payload_dict["output"] = output
 
                         yield f"data: {orjson_dumps(payload_dict)}\n\n"
+                        
+                        # We only fetch state if we really need the new checkpoint
+                        # This avoids the expensive DB call per node-end
+                        # But we need the checkpoint ID for the frontend to track history correctly.
+                        # Optimization: Only do this for major nodes or try to parse checkpoint from event metadata if available.
+                        # For now, we keep it but acknowledge the cost.
 
                         current_state = await graph.aget_state(config)
                         if current_state:

@@ -16,25 +16,36 @@ class OrchestratorService:
         self.registry = AgentRegistry()
 
     async def decide_next_step(
-        self, request: str, history: List[AgentResult], context: Optional[str] = ""
+        self,
+        request: str,
+        history: List[AgentResult],
+        context: Optional[str] = "",
+        trace_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> List[str]:
         """
         Analyzes the current state and returns a list of agent names to execute.
         Returns ["qa"] if the task is complete.
         """
 
-        # 1. Get Available Agents
-        registered_nodes = self.registry.get_all()
+        # 1. Get Available Agents (sorted by DyLAN importance score)
+        registered_nodes = sorted(
+            self.registry.get_all(),
+            key=lambda n: n.agent.importance_score * n.agent.success_rate,
+            reverse=True
+        )
         dynamic_agent_names = [node.display_name for node in registered_nodes]
 
+        # Include DyLAN scoring info in agent descriptions
         dynamic_agents_desc = "\n    ".join(
             [
-                f"{idx + 1}. {node.display_name} ({node.agent.role}): {node.description}\n       Primary Goal: {node.agent.goal}"
+                f"{idx + 1}. {node.display_name} ({node.agent.role}) [Score: {node.agent.importance_score:.1f}, Success: {node.agent.success_rate:.0%}]:\n"
+                f"       {node.description}\n"
+                f"       Domains: {', '.join(node.agent.task_domains) if node.agent.task_domains else 'general'}"
                 for idx, node in enumerate(registered_nodes)
             ]
         )
 
-        ["QA", "TOOLS"] + dynamic_agent_names
 
         # 2. Format History
         history_desc = "No history yet."
@@ -73,16 +84,36 @@ class OrchestratorService:
 
         Instructions:
         1. Review the User Request and Execution History.
-        2. If the detailed execution history shows an agent has JUST run, avoid re-selecting them immediately unless requested.
-        3. If the task is substantially complete, select QA.
-        4. You may select MULTIPLE agents if they can work in parallel to save time.
-        5. Return a COMMA-SEPARATED list of agent names (e.g. "RESEARCH, ANALYST").
+        2. **MoA Strategy (Layer 1)**: If the task requires diverse perspectives (e.g., both research and coding), or if DyLAN scores are close, SELECT MULTIPLE agents to run in parallel.
+        3. **DyLAN Strategy**: Prioritize agents with higher scores/relevant domains, but allow lower-scored specialized agents if the domain is a perfect match.
+        4. If the detailed execution history shows an agent has JUST run, avoid re-selecting them immediately unless requested.
+        5. If the task is substantially complete, select QA to synthesize the results (Layer 2 Aggregation).
+        6. Return a COMMA-SEPARATED list of agent names (e.g. "RESEARCH, ANALYST").
 
         Return ONLY the comma-separated list of selected agents.
         """
 
         # 4. LLM Call
-        decision_raw = await llm.acall(prompt)
+        # Inject Observability
+        callbacks = []
+        if trace_id:
+            from core.observability import get_observability_callback
+
+            callbacks.append(get_observability_callback(trace_id=trace_id, user_id=user_id, trace_name="orchestrator_decision"))
+
+        decision_raw = await llm.acall(prompt, callbacks=callbacks)
+        
+        # DEBUG: Log logic to file
+        try:
+            with open("/app/backend/src/debug_orchestrator.log", "a") as f:
+                f.write(f"\n--- Decision at {datetime.now(UTC)} ---\n")
+                f.write(f"History Count: {len(history)}\n")
+                if history:
+                    f.write(f"Last Result: {history[-1].summary[:200]}\n")
+                f.write(f"LLM Raw Output: {decision_raw}\n")
+        except Exception as e:
+            print(f"Debug Log Error: {e}")
+
         decisions = [d.strip().upper() for d in decision_raw.split(",")]
 
         # 5. Validate & Map

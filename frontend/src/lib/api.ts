@@ -125,6 +125,11 @@ export interface AgentConfig {
     mcp_servers: string[];
     files_access: boolean;
     s3_access: boolean;
+    // DyLAN scoring fields
+    importance_score?: number;
+    success_rate?: number;
+    task_domains?: string[];
+    use_reflection?: boolean;
   };
   task: {
     description: string;

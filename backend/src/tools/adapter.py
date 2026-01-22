@@ -53,8 +53,11 @@ class CrewMCPTool(BaseTool):
         self._async_tool_func = async_tool_func
 
     def _run(self, *args, **kwargs):
-        """Execute the tool synchronously."""
-        return self._sync_tool_func(*args, **kwargs)
+        """
+        Execute the tool synchronously.
+        CRITICAL: This architecture is STRICT ASYNC. Sync execution is forbidden to prevent blocking the event loop.
+        """
+        raise NotImplementedError("This tool is async-only. Use _arun to prevent blocking the event loop.")
 
     async def _arun(self, *args, **kwargs):
         """Execute the tool asynchronously."""

@@ -52,21 +52,21 @@ export function StepDetailsPanel({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 bottom-0 z-50 flex w-full max-w-md flex-col border-l border-white/10 bg-[#0f1117] shadow-2xl"
+            className="fixed top-0 right-0 bottom-0 z-50 flex w-full flex-col border-l border-white/10 bg-[#0f1117] shadow-2xl md:max-w-md"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-6 backdrop-blur-md">
-              <div>
+            <div className="flex items-center gap-4 border-b border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
+              <div className="min-w-0 flex-1">
                 <h3 className="text-primary/80 mb-1 text-xs font-semibold tracking-widest uppercase">
                   Step Analysis
                 </h3>
-                <h2 className="text-foreground text-2xl font-bold tracking-tight capitalize">
+                <h2 className="text-foreground truncate text-2xl font-bold tracking-tight capitalize">
                   {stepName || 'Unknown Step'}
                 </h2>
               </div>
 
               {/* View Toggle */}
-              <div className="mr-4 flex gap-1 rounded-lg bg-white/5 p-1">
+              <div className="flex shrink-0 gap-1 rounded-lg bg-white/5 p-1">
                 <button
                   onClick={() => setViewMode('chat')}
                   className={clsx(
@@ -93,7 +93,7 @@ export function StepDetailsPanel({
                 </button>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex shrink-0 gap-2">
                 {onRerun &&
                   checkpointId &&
                   stepName &&
@@ -116,7 +116,7 @@ export function StepDetailsPanel({
             </div>
 
             {/* Content */}
-            <div className="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-6">
+            <div className="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-4 md:p-6">
               {/* Tool Approval UI */}
               {toolCall && (
                 <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">

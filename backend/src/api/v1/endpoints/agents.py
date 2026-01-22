@@ -27,7 +27,7 @@ async def list_agents():
 
 @router.get("/summary")
 async def get_agents_summary():
-    """Get list of registered agents for UI visualization."""
+    """Get list of registered agents for UI visualization with DyLAN scoring."""
     registry = AgentRegistry()
     agents = registry.get_all()
 
@@ -37,6 +37,10 @@ async def get_agents_summary():
             "label": f"{agent.display_name} Agent",
             "role": agent.agent.role,
             "description": agent.description,
+            # DyLAN scoring data for frontend
+            "importance_score": agent.agent.importance_score,
+            "success_rate": agent.agent.success_rate,
+            "task_domains": agent.agent.task_domains,
         }
         for agent in agents
     ]

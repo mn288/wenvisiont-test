@@ -31,7 +31,7 @@ RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 # Expose the port
-EXPOSE 8080
+EXPOSE 8000
 
 # Command to run the application using uvicorn
-CMD ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

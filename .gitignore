@@ -61,5 +61,13 @@ dist/
 service-account.json
 *.pem
 .ruff_cache/**
-.env
+*.env
 .*.env
+*.log
+data/**
+.ruff_cache/**
+.github
+.agent
+
+*.coverage
+.coverage.*

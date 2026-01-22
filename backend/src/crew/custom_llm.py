@@ -1,15 +1,23 @@
+import logging
 from typing import Any, Dict, List
 
 from crewai.llms.base_llm import BaseLLM
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+logger = logging.getLogger(__name__)
+
 
 class QwenLLM(BaseLLM):
-    def __init__(self, model: str, base_url: str, api_key: str, **kwargs):
+    def __init__(self, model: str, base_url: str, api_key: str, callbacks: List[Any] | None = None, **kwargs):
         self.model_name = model
+        self.callbacks = callbacks or []
         self.client = ChatOpenAI(model=model, base_url=base_url, api_key=api_key, streaming=True, **kwargs)
         super().__init__(model=model)
+
+    def _merge_callbacks(self, runtime_callbacks: List[Any] | None) -> List[Any]:
+        merged = (self.callbacks or []) + (runtime_callbacks or [])
+        return merged
 
     def call(
         self,
@@ -33,13 +41,16 @@ class QwenLLM(BaseLLM):
                 else:
                     lc_messages.append(HumanMessage(content=content))
 
+        # Merge callbacks
+        active_callbacks = self._merge_callbacks(callbacks)
+
         # Helper noop for missing callback methods
-        if callbacks:
+        if active_callbacks:
 
             def noop(*args, **kwargs):
                 pass
 
-            for cb in callbacks:
+            for cb in active_callbacks:
                 if not hasattr(cb, "raise_error"):
                     cb.raise_error = True
 
@@ -50,6 +61,7 @@ class QwenLLM(BaseLLM):
                     "ignore_agent",
                     "ignore_chain",
                     "ignore_retry",
+                    "run_inline",
                 ]:
                     if not hasattr(cb, attr):
                         setattr(cb, attr, False)
@@ -74,32 +86,25 @@ class QwenLLM(BaseLLM):
                         setattr(cb, method, noop)
 
         # Handle tools if passed
-        # CrewAI passes 'tools' in kwargs when calling the LLM
         if "tools" in kwargs:
             tools = kwargs.pop("tools")
-            # Bind tools to the client (ChatOpenAI supports bind_tools)
-            # We need to make sure we use a client that supports it.
-            # ChatOpenAI does.
             client = self.client.bind_tools(tools)
         else:
             client = self.client
 
-        # Ensure stop tokens are present to prevent hallucinating observations
         if "stop" not in kwargs:
             kwargs["stop"] = ["Observation:"]
 
-        # Filter out internal CrewAI arguments that OpenAI doesn't support
         for invalid_arg in ["from_task", "from_agent", "response_model"]:
             if invalid_arg in kwargs:
                 kwargs.pop(invalid_arg)
 
         response_content = ""
-        # We perform manual iteration over the stream to ensure token events are emitted.
-        # We DO NOT pass 'callbacks' in the config here, because passing explicit callbacks
-        # overrides the LangChain context callbacks (which are needed for astream_events to work).
-        # By omitting 'config={"callbacks": callbacks}', we allow the context callbacks to
-        # attach to this run, enabling the SSE stream to capture tokens.
-        for chunk in client.stream(lc_messages, **kwargs):
+        # Pass callbacks in config to ensure LangFuse/others catch it.
+        # This might duplicate events if context is already active, but for CrewAI (often isolated) it is safer.
+        stream_config = {"callbacks": active_callbacks} if active_callbacks else None
+        
+        for chunk in client.stream(lc_messages, config=stream_config, **kwargs):
             response_content += chunk.content
 
         return response_content
@@ -126,13 +131,21 @@ class QwenLLM(BaseLLM):
                 else:
                     lc_messages.append(HumanMessage(content=content))
 
+        # Merge callbacks
+        active_callbacks = self._merge_callbacks(callbacks)
+        
+        # DEBUG: Observability Check
+        if active_callbacks:
+            callback_names = [cb.__class__.__name__ for cb in active_callbacks]
+            logger.debug(f"QwenLLM.acall using callbacks: {callback_names}")
+
         # Helper noop for missing callback methods
-        if callbacks:
+        if active_callbacks:
 
             def noop(*args, **kwargs):
                 pass
 
-            for cb in callbacks:
+            for cb in active_callbacks:
                 if not hasattr(cb, "raise_error"):
                     cb.raise_error = True
 
@@ -143,6 +156,7 @@ class QwenLLM(BaseLLM):
                     "ignore_agent",
                     "ignore_chain",
                     "ignore_retry",
+                    "run_inline",
                 ]:
                     if not hasattr(cb, attr):
                         setattr(cb, attr, False)
@@ -166,31 +180,32 @@ class QwenLLM(BaseLLM):
                     if not hasattr(cb, method):
                         setattr(cb, method, noop)
 
-        # Handle tools if passed
+        # Handle tools
         if "tools" in kwargs:
             tools = kwargs.pop("tools")
             client = self.client.bind_tools(tools)
         else:
             client = self.client
 
-        # Ensure stop tokens
         if "stop" not in kwargs:
             kwargs["stop"] = ["Observation:"]
 
-        # Filter out internal CrewAI arguments
         for invalid_arg in ["from_task", "from_agent", "response_model"]:
             if invalid_arg in kwargs:
                 kwargs.pop(invalid_arg)
 
         response_content = ""
-        # Async stream iteration
-        async for chunk in client.astream(lc_messages, **kwargs):
+        
+        stream_config = {"callbacks": active_callbacks} if active_callbacks else None
+
+        async for chunk in client.astream(lc_messages, config=stream_config, **kwargs):
             response_content += chunk.content
 
         return response_content
 
     def supports_function_calling(self) -> bool:
-        return True  # Qwen usually supports it, or we assume so for Agent usage
+        return True
 
     def supports_stop_words(self) -> bool:
         return True
+

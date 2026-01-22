@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from brain.logger import LogHandler
+from brain.registry import AgentRegistry
 from core.database import pool
 from crew.agents import llm
 from models.state import AgentResult, AgentTask, GraphState
@@ -23,6 +24,7 @@ async def preprocess_node(state: GraphState, config: RunnableConfig) -> dict:
     """Validate input and initialize Strict State."""
     logger = LogHandler(pool)
     thread_id = config["configurable"]["thread_id"]
+    config["configurable"].get("user_id")
     checkpoint_id = config["configurable"].get("checkpoint_id")
 
     request = state.get("input_request", "")
@@ -58,6 +60,7 @@ async def supervisor_node(state: GraphState, config: RunnableConfig) -> dict:
     """Decide next steps using OrchestratorService."""
     logger = LogHandler(pool)
     thread_id = config["configurable"]["thread_id"]
+    user_id = config["configurable"].get("user_id")
     checkpoint_id = config["configurable"].get("checkpoint_id")
 
     # Adapt State to Service Contracts
@@ -70,6 +73,8 @@ async def supervisor_node(state: GraphState, config: RunnableConfig) -> dict:
         request=state["input_request"],
         history=history,
         context=state.get("context", ""),
+        trace_id=thread_id,
+        user_id=user_id,
     )
 
     await logger.log_step(thread_id, "supervisor", "output", f"Decided: {next_agent_names}\n", checkpoint_id)
@@ -100,6 +105,7 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
     """Execute a generic agent using CrewService."""
     logger = LogHandler(pool)
     thread_id = config["configurable"]["thread_id"]
+    user_id = config["configurable"].get("user_id")
     checkpoint_id = config["configurable"].get("checkpoint_id")
 
     await logger.log_step(thread_id, agent_name, "info", "Executing...", checkpoint_id)
@@ -122,13 +128,71 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
     )
 
     try:
+        # DEBUG LOG START
+        with open("/app/backend/src/debug_nodes.log", "a") as f:
+            f.write(f"Starting execution for {agent_name}\n")
+            
         # Prepare Infra
         # We assume thread_id is enough to scope the workspace.
         infra_config = infrastructure_service.get_or_create_infrastructure(thread_id)
 
-        result = await crew_service.execute_task(
-            task=current_task, context=state.get("context", ""), infra=infra_config
-        )
+        # Execution Loop (with Optional Reflection)
+        max_retries = 1
+        attempt = 0
+        final_result = None
+        reflection_feedback = None
+
+        # Check if agent has reflection enabled
+        registry = AgentRegistry()
+        agent_config = registry.get_config(agent_name)
+        use_reflection = agent_config.agent.use_reflection if agent_config else False
+
+        while attempt <= max_retries:
+            attempt += 1
+            
+            # If retrying, append reflection feedback to context
+            execution_context = state.get("context", "")
+            if attempt > 1 and reflection_feedback:
+                 execution_context += f"\n\nCRITIQUE & FEEDBACK (Please fix):\n{reflection_feedback}"
+
+            result = await crew_service.execute_task(
+                task=current_task,
+                context=execution_context,
+                infra=infra_config,
+                trace_id=thread_id,
+                user_id=user_id,
+            )
+            final_result = result
+
+            if not use_reflection or attempt > max_retries:
+                break
+            
+            # Perform Reflection
+            from crew.agents import llm
+            reflection_prompt = f"""
+            Review the following agent output for the user request: "{state["input_request"]}"
+            
+            Agent Output:
+            {result.raw_output}
+            
+            Identify any logical errors, missing requirements, or hallucinations.
+            If the output is good and meets the request, reply with "APPROVED".
+            If there are issues, provide concise, actionable feedback for the agent to fix them.
+            """
+            
+            critique = await llm.acall(reflection_prompt)
+            
+            if "APPROVED" in critique.upper():
+                await logger.log_step(thread_id, agent_name, "thought", "Self-Correction: Output verified and approved.", checkpoint_id)
+                break
+            else:
+                reflection_feedback = critique
+                await logger.log_step(thread_id, agent_name, "thought", f"Self-Correction Triggered: {critique}", checkpoint_id)
+                # Loop continues to retry with feedback
+
+        # Use the final result from the loop
+        result = final_result
+
 
         # Log the actual content for history (Masked)
         masked_summary = mask_pii(result.summary)
@@ -172,6 +236,10 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         result_dump["summary"] = masked_summary
         result_dump["raw_output"] = masked_raw
 
+        # DyLAN Feedback Loop: Update success rate on completion
+        registry = AgentRegistry()
+        await registry.update_agent_success_rate(agent_name, success=True)
+
         return {
             "results": [result_dump],
             "messages": [AIMessage(content=result.summary, name=agent_name)],
@@ -179,8 +247,34 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         }
 
     except Exception as e:
+        # DEBUG LOG ERROR
+        try:
+            with open("/app/backend/src/debug_nodes.log", "a") as f:
+                f.write(f"Error executing {agent_name}: {e}\n")
+        except Exception:
+            pass
+            
         await logger.log_step(thread_id, agent_name, "error", str(e), checkpoint_id)
-        return {"errors": [str(e)]}
+        
+        # DyLAN Feedback Loop: Update success rate on failure
+        registry = AgentRegistry()
+        await registry.update_agent_success_rate(agent_name, success=False)
+        
+        # CRITICAL FIX: Return a failure result so the Orchestrator knows this agent failed.
+        # This prevents infinite loops where the Orchestrator sees no history and retries the same agent.
+        failure_result = AgentResult(
+            task_id=str(uuid.uuid4()),
+            summary=f"Execution Failed: {str(e)}",
+            raw_output=str(e),
+            metadata={"error": True, "agent": agent_name},
+            timestamp=datetime.now()
+        )
+        
+        return {
+            "results": [failure_result.model_dump()],
+            "errors": [str(e)],
+            "context": f"\n\nAgent {agent_name} Failed:\n{str(e)}"
+        }
 
 
 async def tool_planning_node(state: GraphState, config: RunnableConfig) -> dict:
@@ -211,6 +305,7 @@ async def qa_node(state: GraphState, config: RunnableConfig) -> dict:
     """Final QA using strict context."""
     logger = LogHandler(pool)
     thread_id = config["configurable"]["thread_id"]
+    user_id = config["configurable"].get("user_id")
     checkpoint_id = config["configurable"].get("checkpoint_id")
 
     await logger.log_step(thread_id, "qa", "info", "Finalizing...", checkpoint_id)
@@ -225,12 +320,25 @@ async def qa_node(state: GraphState, config: RunnableConfig) -> dict:
 
     prompt = f"""User Request: {state["input_request"]}
     
-    Context:
+    Context (MoA Layer 1 Outputs):
     {full_context}
     
-    Provide a final answer."""
+    **instructions (MoA Layer 2 - Aggregation):**
+    You are the Final Aggregator in a Mixture-of-Agents system.
+    1. Synthesize the findings from all agents above into a cohesive, single answer.
+    2. RESOLVE CONFLICTS: If agents disagree, use your best judgment or mention the discrepancy.
+    3. MERGE INSIGHTS: Combine the code/data from one agent with the analysis from another.
+    4. Provide the final, polished response for the user.
+    """
 
-    response = await llm.acall(prompt)
+    # Inject Observability
+    callbacks = []
+    if thread_id:
+        from core.observability import get_observability_callback
+
+        callbacks.append(get_observability_callback(trace_id=thread_id, user_id=user_id, trace_name="qa_final_response"))
+
+    response = await llm.acall(prompt, callbacks=callbacks)
 
     # Mask PII in final response
     masked_response = mask_pii(response)

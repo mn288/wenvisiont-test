@@ -149,6 +149,18 @@ export const useOrchestrator = () => {
         try {
           const parsed = JSON.parse(data);
 
+          // LangFuse Integration
+          if (typeof window !== 'undefined') {
+            import('@/lib/observability').then(({ getLangfuse }) => {
+              const langfuse = getLangfuse();
+              if (langfuse && parsed.thread_id) {
+                // Ensure trace ID is set (identity) if strictly needed,
+                // or just rely on backend tracing.
+                // Frontend mostly useful for scoring or manual client-side spans.
+              }
+            });
+          }
+
           if (parsed.type === 'token') {
             const node = parsed.node || 'unknown';
             setStreamedContent((prev) => {

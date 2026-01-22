@@ -6,12 +6,25 @@ services:
       - ./data/workspace:/app/data/workspace
     ports:
       - "8000:8000"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     env_file:
       - ./backend/.docker.env
     environment:
       - POSTGRES_HOST=host.docker.internal
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - LANGFUSE_BASE_URL=http://langfuse-server:3000
+      - LANGFUSE_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
+      - LANGFUSE_SECRET_KEY=sk-lf-12345678-1234-1234-1234-1234567890ab
+      - CREWAI_TRACING_ENABLED=true
+      - OTEL_SDK_DISABLED=false
+    depends_on:
+      langfuse-server:
+        condition: service_healthy
+      langfuse-worker:
+        condition: service_started
     # command: uv run uvicorn src.api.main:app --host 0.0.0.0 --reload
 
   frontend:
@@ -22,3 +35,184 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_LANGFUSE_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
+      - NEXT_PUBLIC_LANGFUSE_BASEURL=http://localhost:3001
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # LangFuse Services
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3.148
+    restart: always
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/postgres
+      - SALT=supersecretlongrandomstring32chars!!
+      - ENCRYPTION_KEY=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://default:password@clickhouse:9000
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_AUTH=redis123
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio123
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+
+  langfuse-server:
+    image: langfuse/langfuse:3.148
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/public/health" ]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/postgres
+      - NEXTAUTH_SECRET=supersecretlongrandomstring32chars!!
+      - SALT=supersecretlongrandomstring32chars!!
+      - NEXTAUTH_URL=http://localhost:3001
+      - TELEMETRY_ENABLED=false
+      - LANGFUSE_LOG_LEVEL=debug
+      - LANGFUSE_DEBUG=true
+      - LANGFUSE_INIT_ORG_ID=7b8e1234-5678-90ab-cdef-1234567890ab
+      - LANGFUSE_INIT_PROJECT_ID=8c9f1234-5678-90ab-cdef-1234567890ab
+      - LANGFUSE_INIT_USER_NAME=admin
+      - LANGFUSE_INIT_USER_EMAIL=admin@langfuse.com
+      - LANGFUSE_INIT_USER_PASSWORD=SecurePass123!
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-12345678-1234-1234-1234-1234567890ab
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://default:password@clickhouse:9000
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - ENCRYPTION_KEY=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_AUTH=redis123
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio123
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+
+  langfuse-db:
+    image: postgres:16
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    user: "101:101"
+    restart: always
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    healthcheck:
+      test: [ "CMD", "clickhouse-client", "--query", "SELECT 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse/config.d:/etc/clickhouse-server/config.d
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+
+  zookeeper:
+    image: zookeeper:3.9.1
+    restart: always
+    environment:
+      - ZOO_MY_ID=1
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: [ "CMD", "zkServer.sh", "status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2.4
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass "redis123"
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9090:9000"
+      - "9091:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - minio_data:/data
+
+  create-bucket:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minio minio123; /usr/bin/mc mb myminio/langfuse; /usr/bin/mc anonymous set public myminio/langfuse; exit 0; "
+
+volumes:
+  langfuse_db_data:
+  clickhouse_data:
+  clickhouse_logs:
+  minio_data:
