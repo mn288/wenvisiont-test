@@ -3,6 +3,7 @@ import os
 from typing import Type
 
 import aiofiles
+from aiofiles import os as aios
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
@@ -63,7 +64,17 @@ class AsyncFileReadTool(BaseTool):
             return str(e)
 
         if not os.path.exists(full_path):
-            return f"Error: File {file_path} does not exist at {full_path}."
+            # Auto-create if not found to prevent agent loops
+            try:
+                directory = os.path.dirname(full_path)
+                if directory and not os.path.exists(directory):
+                    os.makedirs(directory)
+                with open(full_path, "w") as f:
+                    f.write("")
+                return ""  # Return empty content for new file
+            except Exception as e:
+                return f"Error creating missing file: {str(e)}"
+
         try:
             with open(full_path, "r") as f:
                 content = f.read()
@@ -77,8 +88,31 @@ class AsyncFileReadTool(BaseTool):
         except ValueError as e:
             return str(e)
 
-        if not os.path.exists(full_path):
-            return f"Error: File {file_path} does not exist at {full_path}."
+        
+        # Check existence async
+        try:
+           # aiofiles.os.path.exists is available in recent versions, but fallback to stat for safety
+           await aios.stat(full_path)
+           exists = True
+        except OSError:
+           exists = False
+
+        if not exists:
+             # Auto-create if not found to prevent agent loops
+            try:
+                directory = os.path.dirname(full_path)
+                # Check dir existence async
+                try:
+                    await aios.stat(directory)
+                except OSError:
+                     await aios.makedirs(directory, exist_ok=True)
+                
+                async with aiofiles.open(full_path, mode="w") as f:
+                    await f.write("")
+                return "" # Return empty content for new file
+            except Exception as e:
+                return f"Error creating missing file: {str(e)}"
+
         try:
             async with aiofiles.open(full_path, mode="r") as f:
                 content = await f.read()
@@ -151,12 +185,16 @@ class AsyncFileWriteTool(BaseTool):
         except ValueError as e:
             return str(e)
 
+        from aiofiles import os as aios
         mode = "a" if append else "w"
         try:
             # ensure dir exists
             directory = os.path.dirname(full_path)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory)
+            # Check dir async
+            try:
+                 await aios.stat(directory)
+            except OSError:
+                 await aios.makedirs(directory, exist_ok=True)
 
             async with aiofiles.open(full_path, mode=mode) as f:
                 await f.write(content)

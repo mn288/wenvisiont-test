@@ -21,6 +21,7 @@ from models.configuration import Configuration  # noqa
 from models.conversations import Conversation  # noqa
 from models.history import StepLog  # noqa
 from models.mcp import MCPServer  # noqa
+from models.skills import Skill  # noqa - Voyager Skill Library
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

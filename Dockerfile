@@ -27,6 +27,10 @@ COPY --from=builder /app/backend/.venv /app/backend/.venv
 # Copy source code
 COPY backend/src /app/backend/src
 
+# Copy Alembic migrations
+COPY backend/alembic.ini /app/backend/alembic.ini
+COPY backend/alembic /app/backend/alembic
+
 # Set environment
 ENV PATH="/app/backend/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/backend/src

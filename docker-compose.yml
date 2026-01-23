@@ -1,4 +1,21 @@
 services:
+  app-db:
+    image: pgvector/pgvector:pg16
+    restart: always
+    environment:
+      - POSTGRES_USER=wenvision
+      - POSTGRES_PASSWORD=wenvision
+      - POSTGRES_DB=wenvision
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U wenvision" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - app_db_data:/var/lib/postgresql/data
+
   backend:
     build: .
     volumes:
@@ -14,18 +31,25 @@ services:
     env_file:
       - ./backend/.docker.env
     environment:
-      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_HOST=app-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=wenvision
+      - POSTGRES_PASSWORD=wenvision
+      - POSTGRES_DB=wenvision
       - LANGFUSE_BASE_URL=http://langfuse-server:3000
       - LANGFUSE_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
       - LANGFUSE_SECRET_KEY=sk-lf-12345678-1234-1234-1234-1234567890ab
       - CREWAI_TRACING_ENABLED=true
       - OTEL_SDK_DISABLED=false
     depends_on:
+      app-db:
+        condition: service_healthy
       langfuse-server:
         condition: service_healthy
       langfuse-worker:
         condition: service_started
     # command: uv run uvicorn src.api.main:app --host 0.0.0.0 --reload
+
 
   frontend:
     build:
@@ -212,6 +236,7 @@ services:
       /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minio minio123; /usr/bin/mc mb myminio/langfuse; /usr/bin/mc anonymous set public myminio/langfuse; exit 0; "
 
 volumes:
+  app_db_data:
   langfuse_db_data:
   clickhouse_data:
   clickhouse_logs:

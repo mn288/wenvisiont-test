@@ -64,6 +64,9 @@ class CrewService:
         # Add storage instructions if applicable
         task_description = self._inject_storage_instructions(node_config, task_description)
 
+        # MetaGPT: Inject Standard Operating Procedure if configured
+        task_description = self._inject_sop(node_config, task_description)
+
         # 3. Create Agent (passes callbacks to LLM)
         agent_instance = await self.registry.create_agent(
             agent_name, infra=infra, callbacks=callbacks
@@ -126,3 +129,17 @@ class CrewService:
         elif isinstance(usage, dict):
             return usage
         return {}
+
+    def _inject_sop(self, node_config, description: str) -> str:
+        """
+        Inject Standard Operating Procedure (MetaGPT pattern).
+        
+        If the agent has an SOP configured, it's prepended as a mandatory
+        procedure that must be followed before executing the task.
+        """
+        sop = node_config.agent.sop
+        if sop:
+            sop_header = "STANDARD OPERATING PROCEDURE (YOU MUST FOLLOW THIS):\n"
+            return f"{sop_header}{sop}\n\n---\n\nTASK:\n{description}"
+        return description
+

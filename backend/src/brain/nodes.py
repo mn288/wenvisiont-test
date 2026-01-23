@@ -12,6 +12,7 @@ from models.state import AgentResult, AgentTask, GraphState
 from services.crew import CrewService
 from services.infrastructure import InfrastructureService
 from services.orchestrator import OrchestratorService
+from services.skill_service import skill_service
 from utils.pii import mask_pii
 
 # Initialize Services
@@ -136,6 +137,7 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         # We assume thread_id is enough to scope the workspace.
         infra_config = infrastructure_service.get_or_create_infrastructure(thread_id)
 
+
         # Execution Loop (with Optional Reflection)
         max_retries = 1
         attempt = 0
@@ -146,12 +148,32 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         registry = AgentRegistry()
         agent_config = registry.get_config(agent_name)
         use_reflection = agent_config.agent.use_reflection if agent_config else False
+        agent_role = agent_config.agent.role if agent_config else agent_name
+
+        # VOYAGER: Pre-Execution Skill Retrieval
+        skill_context = ""
+        try:
+            retrieved_skills = await skill_service.retrieve_skills(
+                query=state["input_request"],
+                agent_role=agent_role,
+                k=3,
+                similarity_threshold=0.7
+            )
+            if retrieved_skills:
+                skill_context = "\n\nPAST SUCCESSFUL SOLUTIONS (Use as reference):\n"
+                for i, skill in enumerate(retrieved_skills, 1):
+                    skill_context += f"\n--- Skill {i} ---\n"
+                    skill_context += f"Task: {skill.task_description[:200]}...\n"
+                    skill_context += f"Solution: {skill.solution_code[:500]}...\n"
+                await logger.log_step(thread_id, agent_name, "thought", f"Retrieved {len(retrieved_skills)} similar skills from library.", checkpoint_id)
+        except Exception as skill_err:
+            await logger.log_step(thread_id, agent_name, "thought", f"Skill retrieval skipped: {skill_err}", checkpoint_id)
 
         while attempt <= max_retries:
             attempt += 1
             
             # If retrying, append reflection feedback to context
-            execution_context = state.get("context", "")
+            execution_context = state.get("context", "") + skill_context
             if attempt > 1 and reflection_feedback:
                  execution_context += f"\n\nCRITIQUE & FEEDBACK (Please fix):\n{reflection_feedback}"
 
@@ -239,6 +261,17 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         # DyLAN Feedback Loop: Update success rate on completion
         registry = AgentRegistry()
         await registry.update_agent_success_rate(agent_name, success=True)
+
+        # VOYAGER: Post-Execution Skill Saving (async, fire-and-forget)
+        try:
+            await skill_service.add_skill(
+                agent_role=agent_role,
+                task_description=state["input_request"],
+                solution_code=result.raw_output
+            )
+            await logger.log_step(thread_id, agent_name, "thought", "Skill saved to library.", checkpoint_id)
+        except Exception as skill_save_err:
+            await logger.log_step(thread_id, agent_name, "thought", f"Skill save skipped: {skill_save_err}", checkpoint_id)
 
         return {
             "results": [result_dump],

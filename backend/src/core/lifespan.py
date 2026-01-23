@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,10 +8,46 @@ from core.database import pool
 from services.graph_service import GraphService
 
 
+def run_migrations():
+    """Run Alembic migrations programmatically (synchronous)."""
+    import os
+
+    from alembic.config import Config
+
+    from alembic import command
+    
+    # Use absolute path in Docker container
+    alembic_ini_path = "/app/backend/alembic.ini"
+    alembic_scripts_path = "/app/backend/alembic"
+    
+    # Fallback for local development
+    if not os.path.exists(alembic_ini_path):
+        base_path = os.path.join(os.path.dirname(__file__), "..", "..")
+        alembic_ini_path = os.path.join(base_path, "alembic.ini")
+        alembic_scripts_path = os.path.join(base_path, "alembic")
+    
+    alembic_cfg = Config(alembic_ini_path)
+    alembic_cfg.set_main_option("script_location", alembic_scripts_path)
+    
+    # Run migrations
+    command.upgrade(alembic_cfg, "head")
+    print("Alembic migrations applied successfully.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Open DB pool
     await pool.open()
+
+    # Run Alembic Migrations (in thread pool since it's sync)
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, run_migrations)
+    except Exception as e:
+        print(f"WARNING: Migration failed (tables may already exist): {e}")
+
+    # Seed Agents from Config (Dynamic Loading)
+    from brain.seeder import seed_agents
+    await seed_agents()
 
     # Load Agents from DB
     await AgentRegistry().load_agents()

@@ -34,6 +34,8 @@ class AgentConfig(BaseModel):
     task_domains: List[str] = Field(default_factory=list, description="Domain keywords e.g. ['code', 'research', 'analysis']")
     success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Historical task success rate")
     use_reflection: bool = Field(default=False, description="Enable self-correction/reflection step")
+    # MetaGPT-style SOP (arXiv:2308.00352)
+    sop: Optional[str] = Field(default=None, description="Standard Operating Procedure the agent must follow")
 
 
 class TaskConfig(BaseModel):
