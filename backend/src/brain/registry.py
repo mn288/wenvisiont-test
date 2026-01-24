@@ -193,12 +193,43 @@ class AgentRegistry:
 
         return servers
 
+    def get_workflows(self) -> List[Any]:
+        """Load all available workflows (Superagents) from filesystem."""
+        import glob
+        import os
+
+        import yaml
+
+        from models.architect import GraphConfig
+
+        # Define path (same as in endpoints/workflows.py)
+        # Assuming we are in backend/src/brain/registry.py
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        WORKFLOWS_DIR = os.path.join(BASE_DIR, "src", "config", "workflows")
+        
+        configs = []
+        if not os.path.exists(WORKFLOWS_DIR):
+            return configs
+
+        yaml_files = glob.glob(os.path.join(WORKFLOWS_DIR, "*.yaml"))
+        for file_path in yaml_files:
+            try:
+                with open(file_path, "r") as f:
+                    data = yaml.safe_load(f)
+                    configs.append(GraphConfig(**data))
+            except Exception as e:
+                print(f"Error loading workflow {file_path}: {e}")
+        return configs
+
     def validate_node_names(self, node_names: List[str]) -> List[str]:
         """
         Validate that a list of node names exists in the registry.
         Returns a list of invalid names.
         """
-        return [name for name in node_names if name not in self._agents]
+        # Also check workflows
+        workflow_names = [w.name for w in self.get_workflows()]
+        valid_names = list(self._agents.keys()) + workflow_names
+        return [name for name in node_names if name not in valid_names]
 
     async def create_agent(
         self,

@@ -8,6 +8,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from brain.nodes import (
     execute_agent_node,
+    execute_workflow_node,
     preprocess_node,
     qa_node,
     supervisor_node,
@@ -34,11 +35,16 @@ def build_workflow() -> StateGraph:
     workflow.add_node("tool_execution", tool_execution_node)
     workflow.add_node("qa", qa_node)
 
-    # Dynamic Nodes
+    # Dynamic Nodes (Atomic Agents)
     # We get a fresh list of agents from the registry
     for node_config in registry.get_all():
         workflow.add_node(node_config.name, partial(execute_agent_node, agent_name=node_config.name))
         workflow.add_edge(node_config.name, "supervisor")
+        
+    # Dynamic Nodes (Superagent Teams / Workflows)
+    for wf in registry.get_workflows():
+        workflow.add_node(wf.name, partial(execute_workflow_node, workflow_name=wf.name))
+        workflow.add_edge(wf.name, "supervisor")
 
     workflow.set_entry_point("preprocess")
 
@@ -53,6 +59,10 @@ def build_workflow() -> StateGraph:
     # Add dynamic agents to map
     for node_config in registry.get_all():
         supervisor_map[node_config.name] = node_config.name
+        
+    # Add workflows to map
+    for wf in registry.get_workflows():
+        supervisor_map[wf.name] = wf.name
 
     workflow.add_conditional_edges(
         "supervisor",

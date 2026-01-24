@@ -292,7 +292,6 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         # DyLAN Feedback Loop: Update success rate on failure
         registry = AgentRegistry()
         await registry.update_agent_success_rate(agent_name, success=False)
-        
         # CRITICAL FIX: Return a failure result so the Orchestrator knows this agent failed.
         # This prevents infinite loops where the Orchestrator sees no history and retries the same agent.
         failure_result = AgentResult(
@@ -310,6 +309,87 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         }
 
 
+async def execute_workflow_node(state: GraphState, config: RunnableConfig, workflow_name: str) -> dict:
+    """
+    Execute a Superagent Team (Workflow) as a subgraph.
+    Dynamic recursive execution.
+    """
+    logger = LogHandler(pool)
+    thread_id = config["configurable"]["thread_id"]
+    checkpoint_id = config["configurable"].get("checkpoint_id")
+    
+    await logger.log_step(thread_id, f"TEAM_{workflow_name}", "info", f"Initializing Team {workflow_name}...", checkpoint_id)
+
+    # 1. Load Workflow Config
+    registry = AgentRegistry()
+    workflows = registry.get_workflows()
+    target_workflow = next((w for w in workflows if w.name == workflow_name), None)
+    
+    if not target_workflow:
+        error_msg = f"Workflow {workflow_name} not found."
+        await logger.log_step(thread_id, f"TEAM_{workflow_name}", "error", error_msg, checkpoint_id)
+        return {"errors": [error_msg]}
+
+    try:
+        # 2. Build Subgraph on the fly
+        from functools import partial
+
+        from langgraph.graph import END, StateGraph
+        
+        subgraph = StateGraph(GraphState)
+        
+        # Add Nodes
+        node_ids = []
+        for node in target_workflow.nodes:
+            # We map the graph node ID to the agent execution
+            # 'node.type' is the agent name in registry
+            subgraph.add_node(node.id, partial(execute_agent_node, agent_name=node.type))
+            node_ids.append(node.id)
+            
+        # Add Edges
+        for edge in target_workflow.edges:
+            if edge.target == "END":
+                 subgraph.add_edge(edge.source, END)
+            else:
+                 subgraph.add_edge(edge.source, edge.target)
+                 
+        # Set Entry Point (Default to first node if not specified)
+        # Assuming linear or directed flow, usually the first node defined or one without incoming edges.
+        # For simplicity, we use the first node in the list.
+        if node_ids:
+            subgraph.set_entry_point(node_ids[0])
+            
+        # 3. Compile and Run
+        # We don't checkpoint subgraphs separately to avoid state fragmentation, 
+        # or we could share the checkpointer? 
+        # For now, memory-only execution for the sub-step is safer/faster.
+        compiled_subgraph = subgraph.compile()
+        
+        await logger.log_step(thread_id, f"TEAM_{workflow_name}", "info", "Executing Team Logic...", checkpoint_id)
+        
+        # We invoke with the SAME state. 
+        # CAUTION: Infinite recursion if a team calls itself.
+        final_state = await compiled_subgraph.ainvoke(state, config=config)
+        
+        # 4. Extract Results
+        # The subgraph execution will have appended results to 'results' list in state.
+        # We just return the diff/updates. 
+        # actually, finalize_response might gather them.
+        
+        await logger.log_step(thread_id, f"TEAM_{workflow_name}", "output", "Team Execution Complete.", checkpoint_id)
+        
+        # Return the updates from the final state
+        return {
+            "results": final_state.get("results", []),
+            "context": final_state.get("context", ""),
+            "messages": final_state.get("messages", [])
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        await logger.log_step(thread_id, f"TEAM_{workflow_name}", "error", str(e), checkpoint_id)
+        return {"errors": [f"Team Execution Failed: {str(e)}"]}
 async def tool_planning_node(state: GraphState, config: RunnableConfig) -> dict:
     """Legacy Tool Planning (Wrapped)."""
     # ... keeping "lite" version for now or implementing strict ToolService later

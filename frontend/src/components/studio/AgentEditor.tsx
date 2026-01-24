@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Save, AlertCircle, FileCode, LayoutTemplate } from 'lucide-react';
+import { Save, AlertCircle, FileCode, LayoutTemplate, Network } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import yaml from 'js-yaml';
 
@@ -98,7 +98,7 @@ export function AgentEditor({
 
   const updateAgentField = (
     field: keyof AgentConfig['agent'],
-    value: string | boolean | string[]
+    value: string | boolean | string[] | number
   ) => {
     setAgent((prev) => ({
       ...prev,
@@ -234,6 +234,70 @@ export function AgentEditor({
                   <Switch
                     checked={agent.agent.s3_access}
                     onCheckedChange={(c) => updateAgentField('s3_access', c)}
+                  />
+                </div>
+              </div>
+
+              {/* DyLAN / MoA Configuration */}
+              <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                <h3 className="flex items-center gap-2 font-bold text-purple-400">
+                  <Network size={16} /> DyLAN & MoA Configuration
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Importance Score (0.0 - 1.0)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="1"
+                      value={agent.agent.importance_score}
+                      onChange={(e) =>
+                        updateAgentField('importance_score', parseFloat(e.target.value))
+                      }
+                      className="border-white/10 bg-white/5"
+                    />
+                  </div>
+                  <div>
+                    <Label>Success Rate (History)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={agent.agent.success_rate}
+                      onChange={(e) => updateAgentField('success_rate', parseFloat(e.target.value))}
+                      className="border-white/10 bg-white/5"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Task Domains (comma separated)</Label>
+                  <Input
+                    value={agent.agent.task_domains?.join(', ') || ''}
+                    onChange={(e) =>
+                      updateAgentField(
+                        'task_domains',
+                        e.target.value.split(',').map((s) => s.trim())
+                      )
+                    }
+                    placeholder="e.g. coding, research, finance"
+                    className="border-white/10 bg-white/5"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Enable Reflection (Self-Correction)</Label>
+                    <p className="text-muted-foreground text-xs">
+                      Agent will critique its own output before finishing.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={agent.agent.use_reflection}
+                    onCheckedChange={(c) => updateAgentField('use_reflection', c)}
                   />
                 </div>
               </div>

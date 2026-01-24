@@ -49,8 +49,8 @@ export default function CreateAgentWizard() {
     if (mode === 'standalone' && agentConfig) {
       try {
         await saveAgent(agentConfig);
-      } catch {
-        setError('Failed to save agent.');
+      } catch (e) {
+        setError(`Failed to save agent: ${(e as Error).message}`);
         return;
       }
     }

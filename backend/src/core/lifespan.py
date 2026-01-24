@@ -45,6 +45,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"WARNING: Migration failed (tables may already exist): {e}")
 
+    # Seed Infrastructure Config 
+    from core.seeding import seed_infrastructure
+    await seed_infrastructure()
+
     # Seed Agents from Config (Dynamic Loading)
     from brain.seeder import seed_agents
     await seed_agents()

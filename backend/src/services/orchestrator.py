@@ -34,10 +34,16 @@ class OrchestratorService:
             key=lambda n: n.agent.importance_score * n.agent.success_rate,
             reverse=True
         )
+        
+        # Get Workflows (Superagent Teams)
+        workflows = self.registry.get_workflows()
+
         dynamic_agent_names = [node.display_name for node in registered_nodes]
+        # Add workflow names
+        dynamic_agent_names.extend([f"TEAM_{w.name.upper()}" for w in workflows])
 
         # Include DyLAN scoring info in agent descriptions
-        dynamic_agents_desc = "\n    ".join(
+        agents_desc = "\n    ".join(
             [
                 f"{idx + 1}. {node.display_name} ({node.agent.role}) [Score: {node.agent.importance_score:.1f}, Success: {node.agent.success_rate:.0%}]:\n"
                 f"       {node.description}\n"
@@ -45,6 +51,16 @@ class OrchestratorService:
                 for idx, node in enumerate(registered_nodes)
             ]
         )
+        
+        # Add Workflow descriptions
+        workflows_desc = "\n    ".join(
+            [
+                f"TEAM_{w.name.upper()} (Superagent Team): {w.description}\n       Contains {len(w.nodes)} specialized agents."
+                for w in workflows
+            ]
+        )
+        
+        dynamic_agents_desc = f"{agents_desc}\n\n    SUPERAGENT TEAMS:\n    {workflows_desc}" if workflows else agents_desc
 
 
         # 2. Format History
@@ -83,14 +99,20 @@ class OrchestratorService:
         {dynamic_agents_desc}
 
         Instructions:
-        1. Review the User Request and Execution History.
-        2. **MoA Strategy (Layer 1)**: If the task requires diverse perspectives (e.g., both research and coding), or if DyLAN scores are close, SELECT MULTIPLE agents to run in parallel.
-        3. **DyLAN Strategy**: Prioritize agents with higher scores/relevant domains, but allow lower-scored specialized agents if the domain is a perfect match.
-        4. If the detailed execution history shows an agent has JUST run, avoid re-selecting them immediately unless requested.
-        5. If the task is substantially complete, select QA to synthesize the results (Layer 2 Aggregation).
-        6. Return a COMMA-SEPARATED list of agent names (e.g. "RESEARCH, ANALYST").
+        1. **Analyze the Request**: Identify the specific *domains* (e.g., Code, Research, QA) required. matches against Agent Descriptions.
+        2. **Identify Complementary Roles**: Look for agents that form logical pairs for the task:
+           - **Creator & Verifier**: (e.g. Coder + QA, Writer + Editor). One produces, the other checks.
+           - **Planner & Executor**: One designs the plan, the other carries it out.
+           - **Diverse Perspectives**: Multiple agents with different specializations (e.g. Legal + Technical) to address complex queries.
+        3. **Explicit Mentions**: If the user explicitly names an agent or role (e.g. "@Coder", "the researcher"), YOU MUST SELECT THEM.
+        4. **MoA Strategy (Layer 1)**: 
+           - **Parallel Execution**: If the task involves sub-tasks that can be handled by different experts, SELECT ALL RELEVANT AGENTS to run in parallel.
+           - **Avoid Bottlenecks**: Do not assign a complex multi-domain task to a single generic agent if specialized agents are available.
+        5. **DyLAN Strategy**: Use importance scores as a tie-breaker, but NEVER ignore a better-suited specialized agent (even with a lower score) if they are the best fit for a specific sub-task.
+        6. **Context Check**: If the history shows an agent has just run, verify if their output needs downstream processing by a *different* agent.
+        7. **Termination**: If the task is fully complete and the user's last question is answered, select "QA" to finalize.
 
-        Return ONLY the comma-separated list of selected agents.
+        Return ONLY the comma-separated list of selected agents (e.g. "RESEARCH_AGENT, WRITER_AGENT").
         """
 
         # 4. LLM Call
@@ -124,6 +146,10 @@ class OrchestratorService:
         node_map = {}
         for node in registered_nodes:
             node_map[node.display_name.upper()] = node.name
+            
+        # Map Workflows
+        for w in workflows:
+            node_map[f"TEAM_{w.name.upper()}"] = w.name
 
         # Add static nodes to map
         node_map["QA"] = "qa"

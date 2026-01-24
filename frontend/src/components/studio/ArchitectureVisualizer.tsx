@@ -12,7 +12,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { GraphConfig } from '@/lib/api';
-import { User } from 'lucide-react';
+import { User, Bot, Network, BrainCircuit, Layers } from 'lucide-react';
 
 const nodeWidth = 180;
 const nodeHeight = 60;
@@ -50,11 +50,39 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 };
 
 const CustomNode = ({ data }: { data: { label: string; type: string } }) => {
+  // Determine Type-based Styling
+  const type = data.type?.toLowerCase() || '';
+  const label = data.label?.toLowerCase() || '';
+
+  let Icon = Bot;
+  let colorClass = 'text-blue-400 bg-blue-500/20';
+  let borderClass = 'border-blue-500/30';
+
+  if (type.includes('supervisor') || label.includes('supervisor') || label.includes('manager')) {
+    Icon = BrainCircuit;
+    colorClass = 'text-purple-400 bg-purple-500/20';
+    borderClass = 'border-purple-500/50';
+  } else if (type.includes('team') || type.includes('workflow') || label.includes('team')) {
+    Icon = Network;
+    colorClass = 'text-orange-400 bg-orange-500/20';
+    borderClass = 'border-orange-500/50';
+  } else if (type.includes('research') || type.includes('analyze')) {
+    Icon = Layers;
+    colorClass = 'text-indigo-400 bg-indigo-500/20';
+    borderClass = 'border-white/20';
+  } else if (type.includes('qa') || type.includes('quality')) {
+    Icon = User;
+    colorClass = 'text-green-400 bg-green-500/20';
+    borderClass = 'border-white/20';
+  }
+
   return (
-    <div className="flex min-w-[150px] items-center gap-2 rounded-lg border border-white/20 bg-[#1a1a1a] px-4 py-2 shadow-lg">
+    <div
+      className={`flex min-w-[150px] items-center gap-2 rounded-lg border bg-[#1a1a1a] px-4 py-2 shadow-lg transition-all hover:border-white/40 ${borderClass}`}
+    >
       <Handle type="target" position={Position.Left} className="!bg-white/50" />
-      <div className="bg-primary/20 text-primary rounded p-2">
-        <User size={16} />
+      <div className={`rounded p-2 ${colorClass}`}>
+        <Icon size={16} />
       </div>
       <div>
         <div className="text-[10px] font-bold tracking-wider text-white/50 uppercase">
