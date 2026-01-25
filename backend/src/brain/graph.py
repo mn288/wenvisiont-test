@@ -25,6 +25,7 @@ def build_workflow() -> StateGraph:
     Builds and returns a new StateGraph instance based on the current AgentRegistry.
     This allows for dynamic reloading of agents.
     """
+    print("DEBUG: Inside build_workflow start")
     registry = AgentRegistry()
     workflow = StateGraph(GraphState)
 
@@ -34,15 +35,27 @@ def build_workflow() -> StateGraph:
     workflow.add_node("tool_planning", tool_planning_node)
     workflow.add_node("tool_execution", tool_execution_node)
     workflow.add_node("qa", qa_node)
+    
+    RESERVED_NAMES = {"supervisor", "tool_planning", "tool_execution", "qa", "preprocess", "router"}
 
+    print(f"DEBUG: Adding {len(registry.get_all())} agents...")
     # Dynamic Nodes (Atomic Agents)
     # We get a fresh list of agents from the registry
     for node_config in registry.get_all():
+        if node_config.name in RESERVED_NAMES:
+            print(f"DEBUG: Skipping reserved agent name '{node_config.name}'")
+            continue
+            
         workflow.add_node(node_config.name, partial(execute_agent_node, agent_name=node_config.name))
         workflow.add_edge(node_config.name, "supervisor")
         
+    print(f"DEBUG: Adding {len(registry.get_workflows())} workflows...")
     # Dynamic Nodes (Superagent Teams / Workflows)
     for wf in registry.get_workflows():
+        if wf.name in RESERVED_NAMES:
+             print(f"DEBUG: Skipping reserved workflow name '{wf.name}'")
+             continue
+             
         workflow.add_node(wf.name, partial(execute_workflow_node, workflow_name=wf.name))
         workflow.add_edge(wf.name, "supervisor")
 
@@ -64,6 +77,7 @@ def build_workflow() -> StateGraph:
     for wf in registry.get_workflows():
         supervisor_map[wf.name] = wf.name
 
+    print("DEBUG: Building conditional edges...")
     workflow.add_conditional_edges(
         "supervisor",
         supervisor_decision,
@@ -74,6 +88,7 @@ def build_workflow() -> StateGraph:
     workflow.add_edge("tool_execution", "supervisor")
     workflow.add_edge("qa", END)
 
+    print("DEBUG: build_workflow returning")
     return workflow
 
 

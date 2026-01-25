@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from models.agents import NodeConfig
+
 
 class GraphNode(BaseModel):
     id: str = Field(..., description="Unique ID for this node instance in the graph")
@@ -20,6 +22,7 @@ class GraphConfig(BaseModel):
     description: str = Field(..., description="Description of what this Superagent does")
     nodes: List[GraphNode]
     edges: List[GraphEdge]
+    definitions: List[NodeConfig] = Field(default_factory=list, description="Definitions of any new agents created by the architect")
 
 
 class ArchitectRequest(BaseModel):

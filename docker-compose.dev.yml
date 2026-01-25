@@ -1,0 +1,21 @@
+services:
+  # Development Override for Frontend
+  # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+  frontend:
+    build:
+      context: ./frontend
+      target: deps # Use the dependencies stage (faster, no build)
+    volumes:
+      - ./frontend:/app # Mount source code for hot reload
+      - /app/node_modules # Prevent host node_modules from overwriting container's
+      - /app/.next # Isolate build artifacts
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  # Development Override for Backend
+  backend:
+    volumes:
+      - ./backend/src:/app/src # Mount source to the correct location for hot-reload
+      - ./backend/alembic:/app/alembic # Mount migrations
+    command: uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug

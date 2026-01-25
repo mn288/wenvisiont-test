@@ -2,56 +2,15 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from crewai import Agent, Task
-from pydantic import BaseModel, Field
 
 from core.database import pool
 from crew.agents import get_llm, llm
+
+# -------------------------------------------------------------------------
+# Schemas (Moved to models/agents.py)
+# -------------------------------------------------------------------------
+from models.agents import NodeConfig
 from models.infrastructure import InfrastructureConfig
-
-# -------------------------------------------------------------------------
-# Schemas
-# -------------------------------------------------------------------------
-
-
-class AgentConfig(BaseModel):
-    role: str
-    goal: str
-    backstory: str
-    verbose: bool = True
-    allow_delegation: bool = False
-    tools: List[str] = Field(default_factory=list)
-    mcp_servers: List[str] = Field(default_factory=list)
-    files_access: bool = False
-    s3_access: bool = False
-    # CrewAI 2025 parameters
-    max_iter: int = 1
-    max_retry_limit: int = 1
-    max_execution_time: Optional[int] = 30
-    respect_context_window: bool = True
-    inject_date: bool = True
-    # DyLAN-style dynamic agent selection (arXiv:2310.02170)
-    importance_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Agent importance weight for routing")
-    task_domains: List[str] = Field(default_factory=list, description="Domain keywords e.g. ['code', 'research', 'analysis']")
-    success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Historical task success rate")
-    use_reflection: bool = Field(default=False, description="Enable self-correction/reflection step")
-    # MetaGPT-style SOP (arXiv:2308.00352)
-    sop: Optional[str] = Field(default=None, description="Standard Operating Procedure the agent must follow")
-
-
-class TaskConfig(BaseModel):
-    description: str
-    expected_output: str
-    async_execution: bool = False
-
-
-class NodeConfig(BaseModel):
-    name: str = Field(..., description="Graph Node Name")
-    display_name: str = Field(..., description="Supervisor Prompt Name")
-    description: str = Field(..., description="Supervisor Prompt Description")
-    output_state_key: str = Field("crew_output", description="State key to update with result")
-    agent: AgentConfig
-    task: TaskConfig
-
 
 # -------------------------------------------------------------------------
 # Registry (DB Backed)
@@ -61,6 +20,7 @@ class NodeConfig(BaseModel):
 class AgentRegistry:
     _instance = None
     _agents: Dict[str, NodeConfig] = {}
+    _workflows: Dict[str, Any] = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -88,6 +48,38 @@ class AgentRegistry:
                             print(f"Error parsing agent {name}: {e}")
         except Exception as e:
             print(f"Error loading agents from DB: {e}")
+            
+        # Also load workflows and their defined agents
+        await self.load_workflows()
+
+    async def load_workflows(self):
+        """Load all workflows from the database into the cache."""
+        from models.architect import GraphConfig
+        
+        print("Loading workflows from Database...")
+        self._workflows = {}
+        try:
+            async with pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT name, config FROM workflows")
+                    rows = await cur.fetchall()
+                    for row in rows:
+                        name, config_data = row
+                        try:
+                            workflow_config = GraphConfig(**config_data)
+                            self._workflows[workflow_config.name] = workflow_config
+                            print(f"Loaded workflow: {workflow_config.name}")
+                            
+                            # Register internal agent definitions
+                            if workflow_config.definitions:
+                                for agent_def in workflow_config.definitions:
+                                    self._agents[agent_def.name] = agent_def
+                                    print(f"Loaded workflow-defined agent: {agent_def.name}")
+                                    
+                        except Exception as e:
+                            print(f"Error parsing workflow {name}: {e}")
+        except Exception as e:
+            print(f"Error loading workflows from DB: {e}")
 
     async def save_agent(self, config: NodeConfig):
         """Save or update an agent in the database and cache."""
@@ -112,6 +104,32 @@ class AgentRegistry:
                 )
             await conn.commit()
 
+    async def save_workflow(self, config: Any):
+        """Save or update a workflow in the database and cache."""
+        # Update Cache
+        self._workflows[config.name] = config
+        
+        # Also register definitions immediately
+        if config.definitions:
+             for agent_def in config.definitions:
+                 self._agents[agent_def.name] = agent_def
+
+        # Persist to DB
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                config_json = config.model_dump_json()
+
+                await cur.execute(
+                    """
+                    INSERT INTO workflows (id, name, config, created_at, updated_at)
+                    VALUES (%s, %s, %s::jsonb, NOW(), NOW())
+                    ON CONFLICT (name) 
+                    DO UPDATE SET config = EXCLUDED.config, updated_at = NOW()
+                    """,
+                    (uuid4(), config.name, config_json),
+                )
+            await conn.commit()
+
     async def delete_agent(self, name: str):
         """Delete an agent from the database and cache."""
         if name in self._agents:
@@ -120,6 +138,19 @@ class AgentRegistry:
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("DELETE FROM superagents WHERE name = %s", (name,))
+            await conn.commit()
+
+    async def delete_workflow(self, name: str):
+        """Delete a workflow from the database and cache."""
+        if name in self._workflows:
+            # Note: We do NOT strictly remove the 'definitions' from self._agents 
+            # because they might be shared or complex to track. 
+            # A full reload is safer if cleanup is needed.
+            del self._workflows[name]
+
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("DELETE FROM workflows WHERE name = %s", (name,))
             await conn.commit()
 
     async def update_agent_success_rate(self, name: str, success: bool, alpha: float = 0.1):
@@ -194,32 +225,8 @@ class AgentRegistry:
         return servers
 
     def get_workflows(self) -> List[Any]:
-        """Load all available workflows (Superagents) from filesystem."""
-        import glob
-        import os
-
-        import yaml
-
-        from models.architect import GraphConfig
-
-        # Define path (same as in endpoints/workflows.py)
-        # Assuming we are in backend/src/brain/registry.py
-        BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        WORKFLOWS_DIR = os.path.join(BASE_DIR, "src", "config", "workflows")
-        
-        configs = []
-        if not os.path.exists(WORKFLOWS_DIR):
-            return configs
-
-        yaml_files = glob.glob(os.path.join(WORKFLOWS_DIR, "*.yaml"))
-        for file_path in yaml_files:
-            try:
-                with open(file_path, "r") as f:
-                    data = yaml.safe_load(f)
-                    configs.append(GraphConfig(**data))
-            except Exception as e:
-                print(f"Error loading workflow {file_path}: {e}")
-        return configs
+        """Get all available workflows (Superagents) from cache."""
+        return list(self._workflows.values())
 
     def validate_node_names(self, node_names: List[str]) -> List[str]:
         """

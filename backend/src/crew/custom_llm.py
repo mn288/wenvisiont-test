@@ -1,3 +1,4 @@
+import asyncio  # Lazy import or move to top
 import logging
 from typing import Any, Dict, List
 
@@ -198,8 +199,17 @@ class QwenLLM(BaseLLM):
         
         stream_config = {"callbacks": active_callbacks} if active_callbacks else None
 
-        async for chunk in client.astream(lc_messages, config=stream_config, **kwargs):
-            response_content += chunk.content
+        try:
+            async for chunk in client.astream(lc_messages, config=stream_config, **kwargs):
+                # Explicitly check for cancellation to ensure we stop generating
+                if asyncio.current_task().cancelled():
+                    logger.warning("QwenLLM: Task cancelled during generation loop.")
+                    raise asyncio.CancelledError("Task cancelled during generation loop.")
+                
+                response_content += chunk.content
+        except asyncio.CancelledError:
+            logger.warning("QwenLLM: Generation cancelled.")
+            raise
 
         return response_content
 

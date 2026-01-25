@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Conversation, fetchConversations, deleteConversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Plus, Loader2, Clock, Trash2 } from 'lucide-react';
+import { MessageSquare, Plus, Loader2, Clock, Trash2, ChevronRight } from 'lucide-react';
 import { SettingsDrawer } from './settings/SettingsDrawer';
 import {
   AlertDialog,
@@ -127,28 +127,31 @@ export function HistorySidebar({
         </AlertDialogContent>
       </AlertDialog>
 
-      <div
-        className={cn(
-          'border-border bg-card/30 flex h-full flex-col border-r backdrop-blur-xl',
-          className
-        )}
-      >
-        <div className="border-border space-y-2 border-b p-4">
+      <div className={cn('flex h-full flex-col', className)}>
+        <div className="space-y-3 px-4 pb-2">
           <button
             onClick={onNewChat}
-            className="bg-primary/20 hover:bg-primary/30 text-primary-foreground border-primary/20 group flex w-full items-center justify-center gap-2 rounded-xl border py-3 font-medium transition-all duration-200"
+            className="group from-primary/80 to-primary/60 hover:from-primary hover:to-primary/80 relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r py-3 text-white shadow-lg transition-all"
           >
-            <Plus size={18} className="transition-transform duration-300 group-hover:rotate-90" />
-            <span>New Conversation</span>
+            <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
+            <Plus size={16} className="transition-transform duration-300 group-hover:rotate-90" />
+            <span className="text-sm font-semibold tracking-wide">New Mission</span>
           </button>
-        </div>
 
-        <div className="border-border border-b p-2">
           <Link
             href="/studio"
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-500/20 bg-purple-600/20 py-2 text-xs font-medium text-purple-200 transition-all duration-200 hover:bg-purple-600/30 hover:text-white"
+            className="group flex w-full items-center justify-between rounded-lg border border-white/5 bg-white/5 px-4 py-2.5 text-xs font-medium text-gray-400 transition-all hover:border-purple-500/30 hover:bg-purple-500/10 hover:text-purple-300"
           >
-            <span>🤖 Agent Studio</span>
+            <span className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-purple-500/20 text-purple-400">
+                🤖
+              </span>
+              <span>Agent Studio</span>
+            </span>
+            <ChevronRight
+              size={12}
+              className="opacity-50 transition-transform group-hover:translate-x-0.5"
+            />
           </Link>
         </div>
 

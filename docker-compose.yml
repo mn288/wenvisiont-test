@@ -3,13 +3,13 @@ services:
     image: pgvector/pgvector:pg16
     restart: always
     environment:
-      - POSTGRES_USER=wenvision
-      - POSTGRES_PASSWORD=wenvision
-      - POSTGRES_DB=wenvision
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U wenvision" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,19 +28,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    env_file:
-      - ./backend/.docker.env
+    # Removed env_file, using explicit environment variables matching root .env
     environment:
-      - POSTGRES_HOST=app-db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=wenvision
-      - POSTGRES_PASSWORD=wenvision
-      - POSTGRES_DB=wenvision
-      - LANGFUSE_BASE_URL=http://langfuse-server:3000
-      - LANGFUSE_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
-      - LANGFUSE_SECRET_KEY=sk-lf-12345678-1234-1234-1234-1234567890ab
-      - CREWAI_TRACING_ENABLED=true
-      - OTEL_SDK_DISABLED=false
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - CREWAI_TRACING_ENABLED=${CREWAI_TRACING_ENABLED}
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED}
+      # OpenAI / LLM Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE}
+      - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
     depends_on:
       app-db:
         condition: service_healthy
@@ -58,9 +61,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_LANGFUSE_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
-      - NEXT_PUBLIC_LANGFUSE_BASEURL=http://localhost:3001
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_LANGFUSE_PUBLIC_KEY=${NEXT_PUBLIC_LANGFUSE_PUBLIC_KEY}
+      - NEXT_PUBLIC_LANGFUSE_BASEURL=${NEXT_PUBLIC_LANGFUSE_BASEURL}
     depends_on:
       backend:
         condition: service_healthy
@@ -79,21 +82,21 @@ services:
       minio:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/postgres
-      - SALT=supersecretlongrandomstring32chars!!
-      - ENCRYPTION_KEY=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER}:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/${LANGFUSE_DB_NAME}
+      - SALT=${LANGFUSE_SALT}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
       - CLICKHOUSE_URL=http://clickhouse:8123
-      - CLICKHOUSE_MIGRATION_URL=clickhouse://default:password@clickhouse:9000
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_AUTH=redis123
-      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
-      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
-      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
-      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio123
-      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - REDIS_AUTH=${REDIS_PASSWORD}
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=${LANGFUSE_S3_BUCKET}
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=${LANGFUSE_S3_REGION}
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=${LANGFUSE_S3_ACCESS_KEY}
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=${LANGFUSE_S3_SECRET_KEY}
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=${LANGFUSE_S3_ENDPOINT}
       - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
 
   langfuse-server:
@@ -114,46 +117,48 @@ services:
     environment:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
-      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/postgres
-      - NEXTAUTH_SECRET=supersecretlongrandomstring32chars!!
-      - SALT=supersecretlongrandomstring32chars!!
-      - NEXTAUTH_URL=http://localhost:3001
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER}:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/${LANGFUSE_DB_NAME}
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
+      - NEXTAUTH_URL=${LANGFUSE_NEXTAUTH_URL}
       - TELEMETRY_ENABLED=false
       - LANGFUSE_LOG_LEVEL=debug
       - LANGFUSE_DEBUG=true
+      # Init variables
       - LANGFUSE_INIT_ORG_ID=7b8e1234-5678-90ab-cdef-1234567890ab
       - LANGFUSE_INIT_PROJECT_ID=8c9f1234-5678-90ab-cdef-1234567890ab
-      - LANGFUSE_INIT_USER_NAME=admin
-      - LANGFUSE_INIT_USER_EMAIL=admin@langfuse.com
-      - LANGFUSE_INIT_USER_PASSWORD=SecurePass123!
-      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-12345678-1234-1234-1234-1234567890ab
-      - LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-12345678-1234-1234-1234-1234567890ab
+      - LANGFUSE_INIT_USER_NAME=${LANGFUSE_ADMIN_USERNAME}
+      - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_ADMIN_EMAIL}
+      - LANGFUSE_INIT_USER_PASSWORD=${LANGFUSE_ADMIN_PASSWORD}
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      # Integrations
       - CLICKHOUSE_URL=http://clickhouse:8123
-      - CLICKHOUSE_MIGRATION_URL=clickhouse://default:password@clickhouse:9000
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=password
-      - ENCRYPTION_KEY=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_AUTH=redis123
-      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
-      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
-      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
-      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio123
-      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - REDIS_AUTH=${REDIS_PASSWORD}
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=${LANGFUSE_S3_BUCKET}
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=${LANGFUSE_S3_REGION}
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=${LANGFUSE_S3_ACCESS_KEY}
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=${LANGFUSE_S3_SECRET_KEY}
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=${LANGFUSE_S3_ENDPOINT}
       - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
 
   langfuse-db:
     image: postgres:16
     restart: always
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_USER=${LANGFUSE_DB_USER}
+      - POSTGRES_PASSWORD=${LANGFUSE_DB_PASSWORD}
+      - POSTGRES_DB=${LANGFUSE_DB_NAME}
     ports:
       - "5433:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${LANGFUSE_DB_USER}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -165,9 +170,9 @@ services:
     user: "101:101"
     restart: always
     environment:
-      - CLICKHOUSE_DB=default
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     healthcheck:
       test: [ "CMD", "clickhouse-client", "--query", "SELECT 1" ]
@@ -208,7 +213,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    command: redis-server --requirepass "redis123"
+    command: redis-server --requirepass "${REDIS_PASSWORD}"
 
   minio:
     image: minio/minio
@@ -216,8 +221,8 @@ services:
       - "9090:9000"
       - "9091:9001"
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
@@ -233,7 +238,7 @@ services:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minio minio123; /usr/bin/mc mb myminio/langfuse; /usr/bin/mc anonymous set public myminio/langfuse; exit 0; "
+      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; /usr/bin/mc mb myminio/${LANGFUSE_S3_BUCKET}; /usr/bin/mc anonymous set public myminio/${LANGFUSE_S3_BUCKET}; exit 0; "
 
 volumes:
   app_db_data:

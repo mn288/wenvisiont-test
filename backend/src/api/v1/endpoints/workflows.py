@@ -1,38 +1,20 @@
-import glob
-import os
 from typing import List
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.middleware import get_current_role
+from brain.registry import AgentRegistry
 from models.architect import GraphConfig
 
 router = APIRouter()
-
-WORKFLOWS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "config", "workflows"
-)
-
-# Ensure directory exists
-os.makedirs(WORKFLOWS_DIR, exist_ok=True)
 
 
 @router.get("/", response_model=List[GraphConfig])
 async def list_workflows():
     """List all available workflows (Superagents)."""
-    configs = []
-    yaml_files = glob.glob(os.path.join(WORKFLOWS_DIR, "*.yaml"))
-
-    for file_path in yaml_files:
-        try:
-            with open(file_path, "r") as f:
-                data = yaml.safe_load(f)
-                configs.append(GraphConfig(**data))
-        except Exception as e:
-            print(f"Error loading workflow {file_path}: {e}")
-
-    return configs
+    registry = AgentRegistry()
+    # Now synchronous because it uses cached workflows loaded at startup/reload
+    return registry.get_workflows()
 
 
 @router.post("/", response_model=GraphConfig)
@@ -41,14 +23,13 @@ async def create_or_update_workflow(config: GraphConfig, role: str = Depends(get
     if role not in ["EDITOR", "ADMIN"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions. Required: EDITOR or ADMIN")
 
-    file_path = os.path.join(WORKFLOWS_DIR, f"{config.name}.yaml")
-
     try:
-        # Convert to dict
-        data = config.model_dump(exclude_none=True)
+        registry = AgentRegistry()
+        await registry.save_workflow(config)
 
-        with open(file_path, "w") as f:
-            yaml.dump(data, f, sort_keys=False, default_flow_style=False)
+        # Reload Graph to pick up new workflow and its agents
+        from services.graph_service import GraphService
+        await GraphService.get_instance().reload_graph()
 
         return config
     except Exception as e:
@@ -61,10 +42,15 @@ async def delete_workflow(name: str, role: str = Depends(get_current_role)):
     if role != "ADMIN":
         raise HTTPException(status_code=403, detail="Insufficient permissions. Required: ADMIN")
 
-    file_path = os.path.join(WORKFLOWS_DIR, f"{name}.yaml")
-
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    try:
+        registry = AgentRegistry()
+        await registry.delete_workflow(name)
+        
+        # Reload Graph to remove workflow
+        from services.graph_service import GraphService
+        await GraphService.get_instance().reload_graph()
+        
         return {"message": "Workflow deleted"}
 
-    raise HTTPException(status_code=404, detail="Workflow not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete workflow: {str(e)}")

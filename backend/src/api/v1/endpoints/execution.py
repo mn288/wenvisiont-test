@@ -95,11 +95,15 @@ async def invoke(
 
 
 @router.post("/resume/{thread_id}")
-async def resume(thread_id: str, feedback: str = None):
+async def resume(
+    thread_id: str,
+    feedback: str = None,
+    user_id: str = Depends(get_current_user_id),
+):
     """Resume execution after interrupt."""
     graph = await GraphService.get_instance().get_graph()
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
 
     command = Command(resume=feedback) if feedback else None
 
@@ -109,7 +113,10 @@ async def resume(thread_id: str, feedback: str = None):
 
 @router.get("/stream")
 async def stream(
-    input_request: Optional[str] = None, thread_id: str = "default", resume_feedback: Optional[str] = None
+    input_request: Optional[str] = None,
+    thread_id: str = "default",
+    resume_feedback: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Stream events via SSE.
@@ -118,7 +125,7 @@ async def stream(
     """
     graph = await GraphService.get_instance().get_graph()
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
 
     if resume_feedback is not None:
         # Resuming
@@ -259,8 +266,48 @@ async def stream(
             else:
                 yield "data: [DONE]\n\n"
 
+        except asyncio.CancelledError:
+            print(f"Stream Cancelled for thread {thread_id}")
+            yield f"data: {orjson_dumps({'type': 'error', 'content': 'Task Cancelled via Abort'})}\n\n"
         except Exception as e:
             print(f"Stream Error: {e}")
             yield f"data: {orjson_dumps({'type': 'error', 'content': str(e)})}\n\n"
 
+    # Register this stream processing as a task if needed, or simply return response.
+    # StreamingResponse runs in a separate task managed by Starlette/Uvicorn.
+    # To support cancellation, we should register the current task logic?
+    # Actually, Starlette cancels the response task if client disconnects.
+    # For explicit abort via BUTTON while staying connected to stream (or reconnecting),
+    # we need the backend task (the graph execution) to be cancellable.
+    
+    # Wait: The stream endpoint RUNS the graph via astream_events.
+    # If we want to cancel execution, we must cancel the task running astream_events.
+    # Since this is a generator inside StreamingResponse, we can wrap it?
+    # BETTER APPROACH: The `stream` endpoint is keeping the connection open.
+    # If we call /abort, we want to cancel the GRAPH EXECUTION.
+    # But here, graph execution (`graph.astream_events`) creates its own internal tasks or runs in this loop.
+    # If we cancel the task hosting this `event_generator`, `astream_events` should cancel.
+    
+    # So we need to access the current task.
+    import asyncio
+    current_task = asyncio.current_task()
+    if current_task:
+        from services.execution_manager import ExecutionManager
+        ExecutionManager.get_instance().register_task(thread_id, current_task)
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/abort/{thread_id}")
+async def abort_job(thread_id: str):
+    """Abort a running job/stream for the given thread_id."""
+    from services.execution_manager import ExecutionManager
+    
+    cancelled = ExecutionManager.get_instance().cancel_task(thread_id)
+    if cancelled:
+        return {"status": "cancelled", "message": f"Job {thread_id} aborted."}
+    else:
+        # It might not be running or not found
+        # We can also try to force interrupt the graph state if supported?
+        return {"status": "not_found", "message": "No active job found for this thread."}
+

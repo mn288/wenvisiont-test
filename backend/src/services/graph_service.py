@@ -31,12 +31,15 @@ class GraphService:
         print("Reloading Graph...")
 
         # Build new workflow
+        print("DEBUG: Calling build_workflow()...")
         workflow = build_workflow()
+        print("DEBUG: build_workflow() done.")
 
         # One-time setup: Create checkpoint tables using autocommit connection
         # This is required because CREATE INDEX CONCURRENTLY cannot run inside a transaction
         if not GraphService._tables_initialized:
             try:
+                print("DEBUG: Initializing checkpoint tables...")
                 async with await AsyncConnection.connect(
                     settings.database_url,
                     autocommit=True
@@ -54,6 +57,7 @@ class GraphService:
         checkpointer = AsyncPostgresSaver(pool)
 
         # Compile
+        print("DEBUG: Compiling graph...")
         self.compiled_graph = workflow.compile(checkpointer=checkpointer, interrupt_before=["qa", "tool_execution"])
         print("Graph Reloaded Successfully.")
         return self.compiled_graph

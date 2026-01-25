@@ -1,0 +1,222 @@
+name: Python Engineering to QA Workflow
+description: A multi-agent workflow that guides code from development through quality
+  assurance, ensuring high standards in Python engineering practices and thorough
+  testing before deployment.
+nodes:
+- id: code_developer
+  type: code_developer
+  config: {}
+- id: code_reviewer
+  type: code_reviewer
+  config: {}
+- id: unit_tester
+  type: unit_tester
+  config: {}
+- id: integration_tester
+  type: integration_tester
+  config: {}
+- id: qa_analyzer
+  type: qa_analyzer
+  config: {}
+- id: supervisor
+  type: supervisor
+  config: {}
+edges:
+- source: code_developer
+  target: code_reviewer
+- source: code_reviewer
+  target: unit_tester
+- source: unit_tester
+  target: integration_tester
+- source: integration_tester
+  target: qa_analyzer
+- source: qa_analyzer
+  target: supervisor
+definitions:
+- name: code_developer
+  display_name: Code Developer
+  description: Responsible for writing clean, efficient, and maintainable Python code
+    based on requirements.
+  output_state_key: developed_code
+  agent:
+    role: Senior Python Engineer
+    goal: Produce high-quality, well-documented Python code that meets functional
+      and performance requirements.
+    backstory: Experienced in building scalable backend systems and adhering to PEP8
+      and best practices in software engineering.
+    verbose: true
+    allow_delegation: false
+    tools: []
+    mcp_servers: []
+    files_access: true
+    s3_access: false
+    max_iter: 1
+    max_retry_limit: 1
+    max_execution_time: 30
+    respect_context_window: true
+    inject_date: true
+    importance_score: 0.5
+    task_domains: []
+    success_rate: 1.0
+    use_reflection: false
+  task:
+    description: Write Python code for the given feature or module, ensuring it follows
+      best practices and includes inline documentation.
+    expected_output: A complete, well-structured Python file with proper functions,
+      classes, and docstrings.
+    async_execution: false
+- name: code_reviewer
+  display_name: Code Reviewer
+  description: Reviews code for correctness, readability, performance, and adherence
+    to standards.
+  output_state_key: reviewed_code
+  agent:
+    role: Code Quality Lead
+    goal: Ensure code quality by identifying bugs, anti-patterns, and deviations from
+      style guides.
+    backstory: Has extensive experience in code reviews and is familiar with common
+      Python pitfalls and security issues.
+    verbose: true
+    allow_delegation: false
+    tools: []
+    mcp_servers: []
+    files_access: true
+    s3_access: false
+    max_iter: 1
+    max_retry_limit: 1
+    max_execution_time: 30
+    respect_context_window: true
+    inject_date: true
+    importance_score: 0.5
+    task_domains: []
+    success_rate: 1.0
+    use_reflection: false
+  task:
+    description: Review the submitted code for correctness, performance, maintainability,
+      and compliance with coding standards.
+    expected_output: A detailed review report with feedback and approval or rejection
+      of the code.
+    async_execution: false
+- name: unit_tester
+  display_name: Unit Tester
+  description: Writes and executes unit tests to validate individual components of
+    the code.
+  output_state_key: unit_test_results
+  agent:
+    role: Test Automation Engineer
+    goal: Ensure all functions and methods are tested with comprehensive unit tests
+      using pytest or unittest.
+    backstory: Specializes in test-driven development and has a strong understanding
+      of test coverage and edge cases.
+    verbose: true
+    allow_delegation: false
+    tools: []
+    mcp_servers: []
+    files_access: true
+    s3_access: false
+    max_iter: 1
+    max_retry_limit: 1
+    max_execution_time: 30
+    respect_context_window: true
+    inject_date: true
+    importance_score: 0.5
+    task_domains: []
+    success_rate: 1.0
+    use_reflection: false
+  task:
+    description: Create and run unit tests for the codebase, ensuring 90%+ test coverage.
+    expected_output: A test report showing pass/fail status and coverage metrics.
+    async_execution: false
+- name: integration_tester
+  display_name: Integration Tester
+  description: Tests the interaction between different modules or services to ensure
+    seamless integration.
+  output_state_key: integration_test_results
+  agent:
+    role: Integration Specialist
+    goal: Verify that components work together correctly under real-world conditions.
+    backstory: Has experience in testing microservices, APIs, and distributed systems.
+    verbose: true
+    allow_delegation: false
+    tools: []
+    mcp_servers: []
+    files_access: true
+    s3_access: false
+    max_iter: 1
+    max_retry_limit: 1
+    max_execution_time: 30
+    respect_context_window: true
+    inject_date: true
+    importance_score: 0.5
+    task_domains: []
+    success_rate: 1.0
+    use_reflection: false
+  task:
+    description: Execute integration tests across modules and services to validate
+      end-to-end functionality.
+    expected_output: A report confirming successful integration and identifying any
+      interface or data flow issues.
+    async_execution: false
+- name: qa_analyzer
+  display_name: QA Analyzer
+  description: Analyzes test results and quality metrics to determine if the code
+    is ready for production.
+  output_state_key: qa_analysis
+  agent:
+    role: QA Lead
+    goal: Evaluate the overall quality of the code and test outcomes to make a release
+      readiness decision.
+    backstory: Has a deep understanding of QA processes, risk assessment, and release
+      criteria.
+    verbose: true
+    allow_delegation: false
+    tools: []
+    mcp_servers: []
+    files_access: true
+    s3_access: false
+    max_iter: 1
+    max_retry_limit: 1
+    max_execution_time: 30
+    respect_context_window: true
+    inject_date: true
+    importance_score: 0.5
+    task_domains: []
+    success_rate: 1.0
+    use_reflection: false
+  task:
+    description: Review all test results, code quality scores, and feedback to determine
+      if the code passes QA.
+    expected_output: A final QA assessment report with a recommendation to approve,
+      reject, or request fixes.
+    async_execution: false
+- name: supervisor
+  display_name: Workflow Supervisor
+  description: Coordinates the entire workflow, manages state transitions, and ensures
+    all steps are completed before final approval.
+  output_state_key: workflow_status
+  agent:
+    role: Project Coordinator
+    goal: Orchestrate the multi-agent workflow and ensure all quality gates are met.
+    backstory: Experienced in managing software delivery pipelines and cross-functional
+      team coordination.
+    verbose: true
+    allow_delegation: false
+    tools: []
+    mcp_servers: []
+    files_access: true
+    s3_access: false
+    max_iter: 1
+    max_retry_limit: 1
+    max_execution_time: 30
+    respect_context_window: true
+    inject_date: true
+    importance_score: 0.5
+    task_domains: []
+    success_rate: 1.0
+    use_reflection: false
+  task:
+    description: Monitor the workflow, trigger next steps, and provide final status
+      on the code's readiness for deployment.
+    expected_output: A final status report indicating whether the code is approved
+      for release or requires rework.
+    async_execution: false

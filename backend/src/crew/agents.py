@@ -9,7 +9,7 @@ llm = QwenLLM(
     base_url=settings.OPENAI_API_BASE,
     api_key=settings.OPENAI_API_KEY,
     temperature=0.0,  # Deterministic for compliance
-    max_tokens=2048,
+    max_tokens=4096,
 )
 
 
@@ -20,7 +20,7 @@ def get_llm(callbacks: List[Any] | None = None) -> QwenLLM:
         base_url=settings.OPENAI_API_BASE,
         api_key=settings.OPENAI_API_KEY,
         temperature=0.0,
-        max_tokens=2048,
+        max_tokens=4096,
         callbacks=callbacks,
     )
 

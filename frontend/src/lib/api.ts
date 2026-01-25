@@ -340,6 +340,15 @@ export interface SystemStats {
 
 export async function getStats(): Promise<SystemStats> {
   const res = await fetch('http://localhost:8000/stats/');
-  if (!res.ok) throw new Error('Failed to fetch stats');
+  return res.json();
+}
+
+export async function abortJob(threadId: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`http://localhost:8000/abort/${threadId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    return { status: 'error', message: 'Failed to abort job' };
+  }
   return res.json();
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
+
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { HistorySidebar } from '@/components/HistorySidebar';
 import { GraphVisualizer } from '@/components/GraphVisualizer'; // NEW
@@ -11,7 +11,16 @@ import { CommandCenter } from '@/components/CommandCenter';
 import { ReportView } from '@/components/ReportView';
 import { StepDetailsPanel } from '@/components/orchestrator/StepDetailsPanel';
 
-import { Cpu, Activity, Menu, Layout, Terminal as TerminalIcon, FileCode } from 'lucide-react';
+import {
+  Cpu,
+  Layout,
+  Terminal as TerminalIcon,
+  FileCode,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 import { useOrchestrator } from '@/hooks/useOrchestrator';
 import {
@@ -34,8 +43,9 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [agentMap, setAgentMap] = useState<Record<string, string>>({});
 
-  // Layout State (Tabs for right panel?)
+  // Layout State (Right Panel)
   const [activeTab, setActiveTab] = useState<'terminal' | 'report'>('terminal');
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
 
   useEffect(() => {
     listAgents()
@@ -98,8 +108,6 @@ export default function Home() {
     actions.setIsLoading(true);
 
     // For fork/rerun, we preserve the FULL tree history
-    // New nodes will be appended and connected via parentCheckpointId to the fork point
-    // This creates a proper branching visualization
     const now = new Date();
     actions.setLogs((prev) => [
       ...prev,
@@ -124,8 +132,6 @@ export default function Home() {
           },
         ]);
 
-        // CRITICAL: Reload topology to get the fork point structure before streaming
-        // This ensures new streaming nodes know about existing graph context
         try {
           const [logs, topology] = await Promise.all([
             fetchStepHistory(state.threadId),
@@ -133,7 +139,6 @@ export default function Home() {
           ]);
 
           const { visited } = reconstructStateFromLogs(logs, topology);
-          // Update visitedNodes with full topology including fork point
           actions.setVisitedNodes(visited);
 
           actions.setLogs((prev) => [
@@ -146,11 +151,9 @@ export default function Home() {
             },
           ]);
 
-          // Start streaming with context - don't clear existing nodes
           actions.startStream(`http://localhost:8000/stream?thread_id=${state.threadId}`, false);
         } catch (topologyError) {
           console.error('Failed to reload topology before streaming:', topologyError);
-          // Fallback: stream anyway but warn
           actions.setLogs((prev) => [
             ...prev,
             {
@@ -198,7 +201,6 @@ export default function Home() {
       try {
         const logs = await fetchStepHistory(state.threadId);
         if (isMounted) {
-          // Strategy: Try strict checkpoint matching first, fall back to name-only matching
           let filteredLogs = logs.filter((log) => {
             if (!selectedStep) return false;
             const nameMatch = log.step_name === selectedStep.name;
@@ -208,8 +210,6 @@ export default function Home() {
             return nameMatch && checkpointMatch;
           });
 
-          // Fallback: if no logs found with checkpoint matching and we have a checkpointId,
-          // it might be a new rerun node without database logs yet - show all logs for this step
           if (filteredLogs.length === 0 && selectedStep.checkpointId) {
             filteredLogs = logs.filter((log) => log.step_name === selectedStep.name);
           }
@@ -240,7 +240,7 @@ export default function Home() {
       isMobileMenuOpen={isSidebarOpen}
       onMobileMenuClose={() => setIsSidebarOpen(false)}
       sidebar={
-        <div className="flex h-full flex-col gap-4">
+        <div className="flex h-full flex-col gap-1.5">
           {/* History Section */}
           <div className="min-h-0 flex-1 overflow-hidden">
             <HistorySidebar
@@ -251,16 +251,20 @@ export default function Home() {
                 actions.setInput('');
                 setIsSidebarOpen(false);
               }}
+              className="border-none bg-transparent"
             />
           </div>
 
           {/* File Explorer Section */}
-          <div className="flex h-[40%] min-h-[200px] shrink-0 flex-col border-t border-white/10 pt-4">
-            <div className="text-primary flex items-center gap-2 px-4 pb-2 text-xs font-bold tracking-wider uppercase">
-              <FileCode size={12} />
-              Workspace Files
+          <div className="flex h-[40%] min-h-[200px] shrink-0 flex-col pt-2">
+            <div className="mb-2 flex items-center justify-between px-4">
+              <div className="text-muted-foreground flex items-center gap-2 text-[11px] font-bold tracking-wider uppercase opacity-70">
+                <FileCode size={12} />
+                <span>Workspace Items</span>
+              </div>
+              <div className="ml-3 h-px flex-1 bg-white/5" />
             </div>
-            {/* Only render FileExplorer on client to avoid hydration mismatch with local storage state */}
+
             <div className="min-h-0 flex-1 px-2">
               {state.threadId ? (
                 <FileExplorer initialPath={state.threadId} />
@@ -274,119 +278,169 @@ export default function Home() {
         </div>
       }
     >
-      <div className="flex h-full flex-col">
-        {/* Top Header - Minimal */}
-        <header className="z-20 flex shrink-0 items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3 backdrop-blur-md md:px-6">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="text-muted-foreground -ml-2 p-2 hover:text-white md:hidden"
-            >
-              <Menu size={24} />
-            </button>
-            <div className="bg-primary/20 border-primary/30 shadow-glow relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg border">
-              <Image src="/logo.png" alt="wenvision Logo" fill className="object-cover p-1" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white/90 md:text-xl">
-                Agentic <span className="text-primary">Studio</span>
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Future: User Profile or Settings here */}
-          </div>
-        </header>
-
-        {/* Main Workspace (Split View) */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          {/* Center: Graph + Input Area (Flexible) */}
-          <div className="relative flex min-w-0 flex-1 flex-col bg-[#0a0a0a]">
-            {/* Graph Visualization */}
-            <div className="relative min-h-0 flex-1">
-              <div className="absolute inset-0">
-                <GraphVisualizer
-                  activeNodes={state.activeNodes}
-                  visitedNodes={state.visitedNodes}
-                  onStepClick={setSelectedStep}
-                  onRerun={handleRerun}
-                  agentMap={agentMap}
-                />
+      <div className="relative h-full w-full">
+        {/* === LAYER 0: GRAPH BACKGROUND (Spatial Canvas) === */}
+        <div className="fixed inset-0 z-0">
+          <GraphVisualizer
+            activeNodes={state.activeNodes}
+            visitedNodes={state.visitedNodes}
+            onStepClick={setSelectedStep}
+            onRerun={handleRerun}
+            agentMap={agentMap}
+          />
+          {state.visitedNodes.length === 0 && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[0px]">
+              <div className="space-y-4 text-center">
+                <div className="relative mx-auto h-24 w-24 opacity-60">
+                  <div className="bg-primary/20 absolute inset-0 animate-ping rounded-full delay-1000" />
+                  <div className="bg-primary/40 absolute inset-4 animate-ping rounded-full delay-500" />
+                  <div className="bg-primary/20 absolute inset-8 rounded-full backdrop-blur-md" />
+                </div>
+                <p className="font-mono text-xs tracking-[0.2em] text-white/50 uppercase">
+                  Awaiting Mission Directives
+                </p>
               </div>
-              {/* Overlay Waiting State */}
-              {state.visitedNodes.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
-                  <div className="space-y-2 text-center">
-                    <Activity size={32} className="mx-auto animate-pulse text-white/20" />
-                    <p className="font-mono text-sm text-white/40">READY FOR INSTRUCTION</p>
-                  </div>
-                </div>
-              )}
             </div>
+          )}
+        </div>
 
-            {/* Bottom Input Area - Fixed */}
-            <div className="z-20 shrink-0 border-t border-white/5 bg-[#0a0a0a]/90 p-4 pb-6 backdrop-blur-lg">
-              <CommandCenter
-                input={state.input}
-                setInput={actions.setInput}
-                isLoading={state.isLoading}
-                isPaused={state.isPaused}
-                onStart={actions.handleStart}
-                onResume={actions.handleResume}
-                onCancel={() => {
-                  actions.setIsPaused(false);
-                  actions.setIsLoading(false);
+        {/* === LAYER 1: HEADER (Minimal Floating) === */}
+        {/* === LAYER 1: Header Removed (Moved to Sidebar) === */}
+
+        {/* === LAYER 2: FLOATING RIGHT DOCK (Terminal/Report) === */}
+        <motion.div
+          initial={false}
+          animate={{
+            width: isRightPanelCollapsed ? 60 : 500,
+            right: 16,
+          }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className={cn(
+            'fixed top-4 bottom-32 z-20 flex flex-col',
+            'rounded-2xl border border-white/10 bg-black/60 shadow-2xl backdrop-blur-xl',
+            'overflow-hidden'
+          )}
+        >
+          {/* Toggle Button */}
+          <button
+            onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
+            className="text-muted-foreground absolute top-3 left-3 z-50 p-2 transition-colors hover:text-white"
+          >
+            {isRightPanelCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+          </button>
+
+          {isRightPanelCollapsed ? (
+            /* Collapsed View */
+            <div className="mt-16 flex flex-col items-center gap-6">
+              <button
+                onClick={() => {
+                  setActiveTab('terminal');
+                  setIsRightPanelCollapsed(false);
                 }}
-                onReset={actions.handleReset}
-              />
-            </div>
-          </div>
-
-          {/* Right Panel: Logs & Reports */}
-          <div className="flex w-full flex-col border-l border-white/10 bg-[#0c0c0c] lg:w-[450px] xl:w-[500px]">
-            {/* Tabs */}
-            <div className="flex shrink-0 border-b border-white/5">
-              <button
-                onClick={() => setActiveTab('terminal')}
-                className={`flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold tracking-wider uppercase transition-colors ${activeTab === 'terminal' ? 'text-primary border-primary border-b-2 bg-white/5' : 'text-muted-foreground hover:bg-white/5'}`}
+                className={cn(
+                  'rounded-lg p-2 transition-all',
+                  activeTab === 'terminal'
+                    ? 'text-primary bg-primary/10'
+                    : 'text-muted-foreground hover:bg-white/10'
+                )}
               >
-                <TerminalIcon size={14} /> Live Terminal
+                <TerminalIcon size={20} />
               </button>
               <button
-                onClick={() => setActiveTab('report')}
-                className={`flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold tracking-wider uppercase transition-colors ${activeTab === 'report' ? 'text-primary border-primary border-b-2 bg-white/5' : 'text-muted-foreground hover:bg-white/5'}`}
+                onClick={() => {
+                  setActiveTab('report');
+                  setIsRightPanelCollapsed(false);
+                }}
+                className={cn(
+                  'rounded-lg p-2 transition-all',
+                  activeTab === 'report'
+                    ? 'text-primary bg-primary/10'
+                    : 'text-muted-foreground hover:bg-white/10'
+                )}
               >
-                <Layout size={14} /> Mission Report
+                <Layout size={20} />
               </button>
-            </div>
 
-            <div className="relative min-h-0 flex-1 overflow-hidden">
-              {activeTab === 'terminal' ? (
-                <TerminalView
-                  logs={state.logs}
-                  streamedContent={Object.values(state.streamedContent).join('\n\n')}
-                  onLogClick={(node) => setSelectedStep({ name: node })}
-                />
-              ) : (
-                <div className="custom-scrollbar h-full overflow-y-auto p-4">
-                  {state.finalResponse ? (
-                    <ReportView content={state.finalResponse} />
-                  ) : (
-                    <div className="flex h-full items-center justify-center p-8 text-center">
-                      <div className="space-y-4">
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/5">
-                          <Cpu size={24} className="text-white/20" />
-                        </div>
-                        <p className="text-muted-foreground text-sm text-balance">
-                          Mission report will verify and display here upon completion.
-                        </p>
-                      </div>
-                    </div>
+              {/* Status Dot */}
+              <div className="mt-auto mb-6 h-2 w-2 animate-pulse rounded-full bg-green-500" />
+            </div>
+          ) : (
+            /* Expanded View */
+            <div className="flex h-full w-full flex-col">
+              {/* Custom Tab Bar */}
+              <div className="flex shrink-0 gap-4 border-b border-white/5 px-12 py-3">
+                <button
+                  onClick={() => setActiveTab('terminal')}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold tracking-wider uppercase transition-all',
+                    activeTab === 'terminal'
+                      ? 'bg-primary/20 text-primary border-primary/20 border'
+                      : 'text-muted-foreground hover:text-white'
                   )}
-                </div>
-              )}
+                >
+                  <TerminalIcon size={14} /> Terminal
+                </button>
+                <button
+                  onClick={() => setActiveTab('report')}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold tracking-wider uppercase transition-all',
+                    activeTab === 'report'
+                      ? 'bg-primary/20 text-primary border-primary/20 border'
+                      : 'text-muted-foreground hover:text-white'
+                  )}
+                >
+                  <Layout size={14} /> Mission Report
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="relative min-h-0 flex-1 overflow-hidden p-1">
+                {activeTab === 'terminal' ? (
+                  <TerminalView
+                    logs={state.logs}
+                    streamedContent={Object.values(state.streamedContent).join('\n\n')}
+                    onLogClick={(node) => setSelectedStep({ name: node })}
+                  />
+                ) : (
+                  <div className="custom-scrollbar h-full overflow-y-auto">
+                    {state.finalResponse ? (
+                      <ReportView content={state.finalResponse} />
+                    ) : (
+                      <div className="flex h-full items-center justify-center p-8 text-center">
+                        <div className="text-muted-foreground/30 flex flex-col items-center gap-4">
+                          <Cpu size={48} strokeWidth={1} />
+                          <p className="text-sm">Awaiting Report Generation...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+          )}
+        </motion.div>
+
+        {/* === LAYER 3: COMMAND ISLAND (Bottom Floating) === */}
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-30 w-[90%] max-w-2xl -translate-x-1/2">
+          <div className="pointer-events-auto">
+            <CommandCenter
+              input={state.input}
+              setInput={actions.setInput}
+              isLoading={state.isLoading}
+              isPaused={state.isPaused}
+              onStart={actions.handleStart}
+              onResume={actions.handleResume}
+              onCancel={() => {
+                actions.setIsPaused(false);
+                actions.setIsLoading(false);
+                if (state.threadId) {
+                  import('@/lib/api').then(({ abortJob }) => {
+                    abortJob(state.threadId);
+                  });
+                }
+              }}
+              onReset={actions.handleReset}
+            />
           </div>
         </div>
       </div>
@@ -397,9 +451,9 @@ export default function Home() {
         onClose={() => setSelectedStep(null)}
         stepName={selectedStep?.name || null}
         logs={
+          // ... logic remains same ...
           selectedStep && state.streamedContent[selectedStep.name]
-            ? // If we have streaming content, always include it (especially important for live rerun nodes)
-              [
+            ? [
                 ...stepLogs,
                 {
                   id: -1,
@@ -412,8 +466,7 @@ export default function Home() {
               ]
             : stepLogs.length > 0
               ? stepLogs
-              : // If no logs at all, show a helpful message
-                selectedStep && state.isLoading
+              : selectedStep && state.isLoading
                 ? [
                     {
                       id: -2,

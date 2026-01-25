@@ -32,7 +32,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
         role_token = role_context.set(user_role)
 
         # 3.2 Extract User ID (New for Observability)
-        user_id = request.headers.get("X-User-ID", "anonymous-user")
+        # Prioritize Header (X-User-ID) > Query Param (user_id) > Anonymous
+        user_id = request.headers.get("X-User-ID")
+        if not user_id:
+            user_id = request.query_params.get("user_id")
+        
+        if not user_id:
+            user_id = "anonymous-user"
+
         user_id_token = user_id_context.set(user_id)
 
         try:

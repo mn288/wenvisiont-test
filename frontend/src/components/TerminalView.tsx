@@ -11,7 +11,6 @@ import {
   Info,
   AlertCircle,
   CheckCircle2,
-  Lock,
   ArrowDownCircle,
   Copy,
   Maximize2,
@@ -82,51 +81,51 @@ export function TerminalView({ logs, streamedContent, onLogClick }: TerminalView
   };
 
   return (
-    <motion.div
-      layout
+    <div
       className={clsx(
-        'flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0a]/90 font-mono shadow-2xl backdrop-blur-xl transition-all duration-500',
-        isExpanded ? 'fixed inset-4 z-50' : 'relative h-full'
+        'flex h-full flex-col font-mono',
+        isExpanded
+          ? 'fixed inset-4 z-50 rounded-xl border border-white/10 bg-[#0a0a0a]/95 p-4 shadow-2xl'
+          : 'relative'
       )}
     >
-      {/* Terminal Header */}
-      <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="group flex gap-1.5">
-            <div className="shadow-glow-red h-3 w-3 rounded-full bg-red-500/80 transition-all group-hover:bg-red-500" />
-            <div className="shadow-glow-amber h-3 w-3 rounded-full bg-amber-500/80 transition-all group-hover:bg-amber-500" />
-            <div className="shadow-glow-green h-3 w-3 rounded-full bg-green-500/80 transition-all group-hover:bg-green-500" />
+      {/* Terminal Header - Only show if expanded or specifically requested. 
+          Actually, we usually want the header (controls) but maybe cleaner. 
+          For now, keep header but remove outer border/bg of the container. 
+      */}
+
+      {/* If Docked, we might not need the header since parent has tabs. 
+          But we need the Copy/Maximize buttons.
+          Let's make a minimal toolbar instead of a full header box.
+      */}
+
+      <div className="flex shrink-0 items-center justify-between px-2 pb-2">
+        {/* Left Side: Secure Status */}
+        <div className="flex items-center gap-2 opacity-50">
+          <div className="flex gap-1">
+            <div className="h-2 w-2 rounded-full bg-red-500/50" />
+            <div className="h-2 w-2 rounded-full bg-amber-500/50" />
+            <div className="h-2 w-2 rounded-full bg-green-500/50" />
           </div>
-          <div className="text-muted-foreground/60 ml-2 flex items-center gap-2 text-xs font-medium select-none">
-            <Lock size={12} />
-            <span>SECURE_CONNECTION</span>
-          </div>
+          <div className="ml-1 h-3 w-px bg-white/10" />
+          <span className="text-muted-foreground font-mono text-[10px]">SECURE_SHELL</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 rounded-full border border-white/5 bg-white/5 px-3 py-1 sm:flex">
-            <div className="bg-primary h-1.5 w-1.5 animate-pulse rounded-full" />
-            <span className="text-primary text-[10px] font-medium tracking-wider uppercase">
-              Live System Logs
-            </span>
-          </div>
-
-          <div className="mx-1 h-4 w-px bg-white/10" />
-
+        {/* Right Side: Tools */}
+        <div className="flex items-center gap-1">
           <button
             onClick={handleCopyLogs}
-            className="text-muted-foreground rounded-lg p-1.5 transition-colors hover:bg-white/10 hover:text-white"
-            title="Copy Logs"
+            className="text-muted-foreground/60 rounded-md p-1.5 transition-colors hover:bg-white/10 hover:text-white"
+            title="Copy"
           >
-            <Copy size={14} />
+            <Copy size={12} />
           </button>
-
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-muted-foreground rounded-lg p-1.5 transition-colors hover:bg-white/10 hover:text-white"
-            title={isExpanded ? 'Minimize' : 'Maximize'}
+            className="text-muted-foreground/60 rounded-md p-1.5 transition-colors hover:bg-white/10 hover:text-white"
+            title={isExpanded ? 'Collapse' : 'Fullscreen'}
           >
-            {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </button>
         </div>
       </div>
@@ -135,7 +134,7 @@ export function TerminalView({ logs, streamedContent, onLogClick }: TerminalView
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent font-code relative flex-1 space-y-1 overflow-y-auto p-4 text-xs leading-relaxed md:text-sm"
+        className="scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent font-code relative flex-1 space-y-1 overflow-y-auto px-2 pb-2 text-xs leading-relaxed md:text-sm"
       >
         {logs.length === 0 && !streamedContent && (
           <div className="text-muted-foreground/20 flex h-full flex-col items-center justify-center text-center select-none">
@@ -215,6 +214,6 @@ export function TerminalView({ logs, streamedContent, onLogClick }: TerminalView
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }

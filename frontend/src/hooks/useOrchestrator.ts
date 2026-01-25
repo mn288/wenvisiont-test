@@ -3,6 +3,7 @@ import { LogEntry, fetchStepHistory, fetchTopology } from '@/lib/api';
 import { reconstructStateFromLogs, VisitedNode } from '@/lib/state-utils';
 
 const THREAD_ID_STORAGE_KEY = 'wenvision_active_thread_id';
+const USER_ID_STORAGE_KEY = 'wenvision_user_id';
 
 export const useOrchestrator = () => {
   const [input, setInput] = useState('');
@@ -20,6 +21,20 @@ export const useOrchestrator = () => {
     }
     return 'default';
   });
+
+  // Persistent User ID
+  const [userId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      let stored = localStorage.getItem(USER_ID_STORAGE_KEY);
+      if (!stored) {
+        stored = crypto.randomUUID();
+        localStorage.setItem(USER_ID_STORAGE_KEY, stored);
+      }
+      return stored;
+    }
+    return 'anonymous';
+  });
+
   const [isInitializing, setIsInitializing] = useState(true);
 
   const [visitedNodes, setVisitedNodes] = useState<VisitedNode[]>([]);
@@ -431,9 +446,9 @@ export const useOrchestrator = () => {
     const newThreadId = `thread_${Date.now()}`;
     setThreadId(newThreadId);
     startStream(
-      `http://localhost:8000/stream?input_request=${encodeURIComponent(input)}&thread_id=${newThreadId}`
+      `http://localhost:8000/stream?input_request=${encodeURIComponent(input)}&thread_id=${newThreadId}&user_id=${userId}`
     );
-  }, [input, startStream, setThreadId]);
+  }, [input, startStream, setThreadId, userId]);
 
   const handleResume = useCallback(() => {
     setIsPaused(false);
@@ -446,8 +461,10 @@ export const useOrchestrator = () => {
         message: 'Authorization Received. Resuming Operation...',
       },
     ]);
-    startStream(`http://localhost:8000/stream?resume_feedback=approved&thread_id=${threadId}`);
-  }, [threadId, startStream]);
+    startStream(
+      `http://localhost:8000/stream?resume_feedback=approved&thread_id=${threadId}&user_id=${userId}`
+    );
+  }, [threadId, startStream, userId]);
 
   const handleReset = useCallback(() => {
     if (eventSourceRef.current) {
