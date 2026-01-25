@@ -64,6 +64,14 @@ class CrewService:
         # Add storage instructions if applicable
         task_description = self._inject_storage_instructions(node_config, task_description)
 
+        # FORCE-INJECT Context if missing placeholders (Fix Hallucination)
+        if "{research_output}" not in task_description and context:
+            task_description += f"\n\nCONTEXT FROM PREVIOUS STEPS:\n{context}"
+        
+        if "{request}" not in task_description and task.input_data:
+            # Only append if it's not already implicitly obvious
+            task_description += f"\n\nORIGINAL REQUEST:\n{task.input_data}"
+
         # MetaGPT: Inject Standard Operating Procedure if configured
         task_description = self._inject_sop(node_config, task_description)
 
@@ -86,7 +94,7 @@ class CrewService:
         except Exception as e:
             raise RuntimeError(f"Agent {agent_name} kickoff failed: {str(e)}") from e
 
-        summary = result_str[:500] + "..." if len(result_str) > 500 else result_str
+        summary = result_str[:4000] + "..." if len(result_str) > 4000 else result_str
 
         return AgentResult(
             task_id=task.id,
@@ -106,7 +114,10 @@ class CrewService:
         
         if node_config.agent.files_access:
             storage_instructions.append(
-                "- To save files locally, use 'AsyncFileWriteTool'. Do not print code; write it to a file."
+                "- To save files locally, use 'AsyncFileWriteTool'.\n"
+                "- CRITICAL: ALWAYS use relative paths (e.g. 'file.txt', 'data/output.json').\n"
+                "- NEVER use absolute paths starting with / (e.g. '/app/data/...').\n"
+                "- Do not print code; write it to a file."
             )
         if node_config.agent.s3_access:
             storage_instructions.append(

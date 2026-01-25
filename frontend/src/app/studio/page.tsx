@@ -6,13 +6,14 @@ import {
   listAgents,
   listWorkflows,
   deleteAgent,
+  deleteWorkflow,
   getStats,
   AgentConfig,
   GraphConfig,
   SystemStats,
 } from '@/lib/api';
 import { Plus, Users, Shield, Zap, Box, Network } from 'lucide-react';
-import { AgentEditor } from '@/components/studio/AgentEditor';
+import { AgentEditModal } from '@/components/agents/AgentEditModal';
 import { WorkflowViewer } from '@/components/studio/WorkflowViewer';
 import { DashboardLayout } from '@/components/DashboardLayout';
 
@@ -201,7 +202,7 @@ export default function StudioDashboard() {
         )}
 
         {selectedAgent && (
-          <AgentEditor
+          <AgentEditModal
             agent={selectedAgent}
             isOpen={!!selectedAgent}
             onClose={() => setSelectedAgent(null)}
@@ -225,6 +226,16 @@ export default function StudioDashboard() {
             config={selectedWorkflow}
             isOpen={!!selectedWorkflow}
             onClose={() => setSelectedWorkflow(null)}
+            onDelete={async (name) => {
+              try {
+                await deleteWorkflow(name);
+                setWorkflows((prev) => prev.filter((w) => w.name !== name));
+                setSelectedWorkflow(null);
+              } catch (e) {
+                console.error('Failed to delete workflow:', e);
+                alert('Failed to delete workflow');
+              }
+            }}
           />
         )}
       </div>

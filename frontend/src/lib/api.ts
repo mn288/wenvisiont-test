@@ -331,6 +331,19 @@ export async function saveWorkflow(config: GraphConfig): Promise<GraphConfig> {
   return res.json();
 }
 
+export async function deleteWorkflow(name: string): Promise<{ message: string }> {
+  try {
+    const res = await fetch(`http://localhost:8000/workflows/${name}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete workflow');
+    return res.json();
+  } catch (error) {
+    console.error('Error deleting workflow:', error);
+    throw error;
+  }
+}
+
 export interface SystemStats {
   total_invocations: number;
   active_agents: number;

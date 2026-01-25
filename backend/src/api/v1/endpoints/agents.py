@@ -183,7 +183,10 @@ async def generate_agent(request: GenerateAgentRequest):
             "tools": [],
             "mcp_servers": {request.mcp_servers},
             "files_access": {str(request.files_access).lower()},
-            "s3_access": {str(request.s3_access).lower()}
+            "s3_access": {str(request.s3_access).lower()},
+            "importance_score": 0.5,
+            "task_domains": ["general"],
+            "use_reflection": false
         }},
         "task": {{
             "description": "Task description... IMPORTANT: You MUST include {{request}} and {{research_output}} placeholders in the description string so the agent receives the user input and context. ADDITIONALLY, specifically instruct the agent to use the 'AsyncFileWriteTool' (or available file write tool) to save any generated code to the file system, rather than just printing it.",

@@ -23,20 +23,34 @@ Available Nodes (Registry):
 {nodes_text}
 
 Instructions:
-1. Prefer using Available Nodes if they fit the requirement.
-2. **CRITICAL**: If the available nodes are insufficient or empty, you MUST define NEW agents in the 'definitions' list.
-3. The 'type' in 'nodes' list must match either an Available Node name OR a name defined in 'definitions'.
+1. **Star Graph Pattern (REQUIRED):**
+   - For any multi-step task, you MUST use a central 'supervisor' node to coordinate.
+   - Connect ALL agents to the 'supervisor' node (bi-directional edges not strictly needed if supervisor routes).
+   - Do NOT create linear chains (A -> B -> C) unless it is a very simple pipeline. Prefer Supervisor -> A, Supervisor -> B.
+2. Prefer using Available Nodes if they fit the requirement.
+3. If available nodes are insufficient, define NEW agents in 'definitions'.
+4. **Dependency Management:**
+   - If Agent B depends on Agent A's output, the Supervisor will handle the data passing.
+   - Ensure Agent B's task description explicit mentions "using the context/output from Agent A".
+5. **MoA & DyLAN Configuration:**
+   - **Relationship Strategy**: Agents are generally equals. Assign `importance_score` (0.0-1.0) to guide the Supervisor.
+     - Critical Path / Decision Makers: 0.8 - 1.0
+     - Support / Research / Workers: 0.4 - 0.7
+   - **Task Domains**: Assign specific keywords (e.g., "coding", "qa", "legal", "web_search", "planning") to `task_domains`.
+   - **Self-Reflection**: Set `use_reflection: true` for agents that generate complex output (Code, Long-form Writing) to enable a self-critique loop.
 
 Output Format:
-Return a strictly valid JSON object adhering to this structure:
+Return a strictly valid JSON object:
 {{
   "name": "Superagent Name",
   "description": "What this workflow does",
   "nodes": [
+    {{ "id": "supervisor", "type": "supervisor", "config": {{}} }},
     {{ "id": "node1", "type": "registry_name_or_new_def_name", "config": {{}} }}
   ],
   "edges": [
-    {{ "source": "node1", "target": "node2" }}
+    {{ "source": "supervisor", "target": "node1" }},
+    {{ "source": "node1", "target": "supervisor" }}
   ],
   "definitions": [
      // Only if defining NEW agents
@@ -52,20 +66,18 @@ Return a strictly valid JSON object adhering to this structure:
          "tools": [],
          "verbose": true,
          "allow_delegation": false,
-         "files_access": true
+         "files_access": true,
+         "importance_score": 0.8, // 0.0 to 1.0 (Higher = more likely to be chosen by DyLAN)
+         "task_domains": ["domain1", "domain2"], // Keywords for routing e.g. ["coding", "python"]
+         "use_reflection": true // Enable for complex generation tasks (Code/Research)
        }},
        "task": {{
-         "description": "...",
+         "description": "Must mention {{research_output}} or {{request}} to receive context.",
          "expected_output": "..."
        }}
      }}
   ]
 }}
-
-Rules:
-1. Ensure the graph is logical (DAG).
-2. Always include a 'supervisor' node if complex coordination is needed.
-3. Keep 'definitions' empty if you only use existing nodes.
 """
 
         # 3. Call LLM

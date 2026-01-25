@@ -57,7 +57,7 @@ async def preprocess_node(state: GraphState, config: RunnableConfig) -> dict:
     }
 
 
-async def supervisor_node(state: GraphState, config: RunnableConfig) -> dict:
+async def supervisor_node(state: GraphState, config: RunnableConfig, allowed_node_names: list[str] | None = None) -> dict:
     """Decide next steps using OrchestratorService."""
     logger = LogHandler(pool)
     thread_id = config["configurable"]["thread_id"]
@@ -67,8 +67,13 @@ async def supervisor_node(state: GraphState, config: RunnableConfig) -> dict:
     # Adapt State to Service Contracts
     # We reconstruct AgentResults from state['results'] which are dicts
     history = [AgentResult(**r) for r in state.get("results", [])]
+    
+    # Log context
+    log_msg = "Orchestrating..."
+    if allowed_node_names:
+        log_msg += f" [Restricted to: {allowed_node_names}]"
 
-    await logger.log_step(thread_id, "supervisor", "info", "Orchestrating...", checkpoint_id)
+    await logger.log_step(thread_id, "supervisor", "info", log_msg, checkpoint_id)
 
     next_agent_names = await orchestrator_service.decide_next_step(
         request=state["input_request"],
@@ -76,6 +81,7 @@ async def supervisor_node(state: GraphState, config: RunnableConfig) -> dict:
         context=state.get("context", ""),
         trace_id=thread_id,
         user_id=user_id,
+        allowed_node_names=allowed_node_names,
     )
 
     await logger.log_step(thread_id, "supervisor", "output", f"Decided: {next_agent_names}\n", checkpoint_id)
@@ -85,7 +91,7 @@ async def supervisor_node(state: GraphState, config: RunnableConfig) -> dict:
     for name in next_agent_names:
         if name in ["qa", "tool_planning"]:
             continue  # Special handling logic in graph edges
-
+        
         # Create a new Task for this agent
         task = AgentTask(
             id=str(uuid.uuid4()),
@@ -276,7 +282,7 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         return {
             "results": [result_dump],
             "messages": [AIMessage(content=result.summary, name=agent_name)],
-            "context": f"\n\nAgent {agent_name} Findings:\n{result.summary}",
+            "context": f"\n\nAgent {agent_name} Findings:\n{masked_raw[:20000]}",
         }
 
     except Exception as e:
@@ -334,29 +340,106 @@ async def execute_workflow_node(state: GraphState, config: RunnableConfig, workf
         # 2. Build Subgraph on the fly
         from functools import partial
 
-        from langgraph.graph import END, StateGraph
+        from langgraph.graph import END, Send, StateGraph
         
         subgraph = StateGraph(GraphState)
         
+        # Track supervisor info to build conditional edges later
+        supervisor_present = False
+        supervisor_map = {}
+        
+        # Calculate Allowed nodes for this team (Constraint)
+        # We need ALL legal nodes in this graph (except maybe supervisor itself, 
+        # but Orchestrator treats "supervisor" as the one calling, it outputs names of OTHERS)
+        team_agent_names = [n.type for n in target_workflow.nodes if n.type != "supervisor"]
+
         # Add Nodes
         node_ids = []
         for node in target_workflow.nodes:
-            # We map the graph node ID to the agent execution
-            # 'node.type' is the agent name in registry
-            subgraph.add_node(node.id, partial(execute_agent_node, agent_name=node.type))
+            if node.type == "supervisor":
+                # Bind the Logic with constraints
+                # partial(supervisor_node, allowed_node_names=...)
+                subgraph.add_node(
+                    node.id, 
+                    partial(supervisor_node, allowed_node_names=team_agent_names)
+                )
+                supervisor_present = True
+            else:
+                # Regular Agent
+                # 'node.type' is the agent name in registry
+                subgraph.add_node(node.id, partial(execute_agent_node, agent_name=node.type))
+            
             node_ids.append(node.id)
             
         # Add Edges
+        # If supervisor is present, we must treat edges STARTING from supervisor as POTENTIAL routes (Conditional).
+        # Edges ENDING at supervisor are normal (Loop back).
+        
         for edge in target_workflow.edges:
-            if edge.target == "END":
-                 subgraph.add_edge(edge.source, END)
+            source = edge.source
+            target = edge.target
+            
+            if source == "supervisor" and supervisor_present:
+                # This is a candidate route for the supervisor.
+                # We expect the Supervisor to return 'next_step': target
+                # So we add it to the map.
+                if target == "END":
+                     # Handle explicit end
+                     supervisor_map["END"] = END
+                else:
+                     supervisor_map[target] = target
             else:
-                 subgraph.add_edge(edge.source, edge.target)
+                # Standard Hard Edge (e.g. Agent -> Supervisor)
+                if target == "END":
+                     subgraph.add_edge(source, END)
+                else:
+                     subgraph.add_edge(source, target)
+        
+        # Special Logic: If supervisor is present, add the one Conditional Edge
+        if supervisor_present:
+            # We need a routing function that looks at state['next_step']
+            # We can reuse 'supervisor_decision' from graph.py if we import it or define a lambda
+            # But 'supervisor_decision' logic is generic: returns state.get("next_step")
+            
+            # We define a local helper or import it?
+            # Let's import the logic or replicate simple version strictly for this subgraph
+            
+            def subgraph_router(state: GraphState):
+                next_steps = state.get("next_step", [])
+                if not next_steps:
+                    return END # Default to END if stuck
+                
+                # Check if it matches our map
+                if isinstance(next_steps, list):
+                     # If strictly one
+                     if len(next_steps) == 1:
+                         return next_steps[0]
+                     return [Send(n, state) for n in next_steps]
+                return next_steps
+
+            # Ensure we have an END route in the map just in case
+            if "END" not in supervisor_map:
+                supervisor_map["END"] = END
+            if "finish" not in supervisor_map: # Common LLM token
+                supervisor_map["finish"] = END
+            # Also map 'QA' to END if the inner supervisor decides 'QA' 
+            # (which means "I'm done" in the Orchestrator logic)
+            if "qa" not in supervisor_map:
+                 supervisor_map["qa"] = END
+                
+            subgraph.add_conditional_edges(
+                "supervisor",
+                subgraph_router,
+                supervisor_map
+            )
                  
-        # Set Entry Point (Default to first node if not specified)
-        # Assuming linear or directed flow, usually the first node defined or one without incoming edges.
-        # For simplicity, we use the first node in the list.
-        if node_ids:
+        # Set Entry Point
+        # If supervisor is present, it is usually the entry point?
+        # Or do we look for the node with no incoming edges?
+        # Architect usually puts Supervisor first.
+        if "supervisor" in node_ids:
+            subgraph.set_entry_point("supervisor")
+        elif node_ids:
             subgraph.set_entry_point(node_ids[0])
             
         # 3. Compile and Run
@@ -371,18 +454,41 @@ async def execute_workflow_node(state: GraphState, config: RunnableConfig, workf
         # CAUTION: Infinite recursion if a team calls itself.
         final_state = await compiled_subgraph.ainvoke(state, config=config)
         
-        # 4. Extract Results
-        # The subgraph execution will have appended results to 'results' list in state.
-        # We just return the diff/updates. 
-        # actually, finalize_response might gather them.
+        # 4. Extract Results (Delta only)
+        # We must return ONLY what was added to prevent duplication in the parent graph
+        
+        initial_results_len = len(state.get("results", []))
+        initial_messages_len = len(state.get("messages", []))
+        initial_context = state.get("context") or ""
+        
+        final_results = final_state.get("results", [])
+        final_messages = final_state.get("messages", [])
+        final_context = final_state.get("context") or ""
+        
+        new_results = final_results[initial_results_len:]
+        new_messages = final_messages[initial_messages_len:]
+        
+        # Calculate Context Delta
+        # Subgraph starts with 'initial_context', appends updates via reduce_str.
+        # So final_context should start with initial_context.
+        new_context = ""
+        if len(final_context) > len(initial_context):
+            new_context = final_context[len(initial_context):]
+            
+            # Clean up potential double separators from reduce_str
+            # If initial_context was not empty, reduce_str added "\n\n" before the new content.
+            # We want to keep that cleaner or let the parent handle it?
+            # Parent: reduce_str(Initial, Delta) -> Initial + "\n\n" + Delta
+            # If Delta starts with "\n\n", we get "\n\n\n\n".
+            # So we strip leading/trailing whitespace from the Delta to be safe.
+            new_context = new_context.strip()
         
         await logger.log_step(thread_id, f"TEAM_{workflow_name}", "output", "Team Execution Complete.", checkpoint_id)
         
-        # Return the updates from the final state
         return {
-            "results": final_state.get("results", []),
-            "context": final_state.get("context", ""),
-            "messages": final_state.get("messages", [])
+            "results": new_results,
+            "context": new_context,
+            "messages": new_messages
         }
 
     except Exception as e:

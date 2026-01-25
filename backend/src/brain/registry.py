@@ -143,9 +143,14 @@ class AgentRegistry:
     async def delete_workflow(self, name: str):
         """Delete a workflow from the database and cache."""
         if name in self._workflows:
-            # Note: We do NOT strictly remove the 'definitions' from self._agents 
-            # because they might be shared or complex to track. 
-            # A full reload is safer if cleanup is needed.
+            workflow = self._workflows[name]
+            
+            # 1. Cascade Delete: Remove agents defined specifically by this workflow
+            if workflow.definitions:
+                print(f"Cascade deleting {len(workflow.definitions)} agents for workflow {name}...")
+                for agent_def in workflow.definitions:
+                    await self.delete_agent(agent_def.name)
+
             del self._workflows[name]
 
         async with pool.connection() as conn:

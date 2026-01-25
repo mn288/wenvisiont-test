@@ -22,21 +22,44 @@ class OrchestratorService:
         context: Optional[str] = "",
         trace_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        allowed_node_names: Optional[List[str]] = None,
     ) -> List[str]:
         """
         Analyzes the current state and returns a list of agent names to execute.
         Returns ["qa"] if the task is complete.
+        
+        Args:
+            allowed_node_names: If provided, RESTRICt selection to these nodes only (plus QA/Tools).
         """
 
         # 1. Get Available Agents (sorted by DyLAN importance score)
+        all_nodes = self.registry.get_all()
+        
+        # Filter if constraint provided
+        if allowed_node_names is not None:
+            # We must map 'display_name' or 'name'?
+            # The registry uses 'name' (snake_case).
+            registered_nodes = [
+                n for n in all_nodes 
+                if n.name in allowed_node_names or n.display_name in allowed_node_names
+            ]
+        else:
+            registered_nodes = all_nodes
+
         registered_nodes = sorted(
-            self.registry.get_all(),
+            registered_nodes,
             key=lambda n: n.agent.importance_score * n.agent.success_rate,
             reverse=True
         )
         
         # Get Workflows (Superagent Teams)
-        workflows = self.registry.get_workflows()
+        all_workflows = self.registry.get_workflows()
+        
+        # Filter workflows
+        if allowed_node_names is not None:
+             workflows = [w for w in all_workflows if w.name in allowed_node_names]
+        else:
+             workflows = all_workflows
 
         dynamic_agent_names = [node.display_name for node in registered_nodes]
         # Add workflow names
@@ -62,6 +85,10 @@ class OrchestratorService:
         
         dynamic_agents_desc = f"{agents_desc}\n\n    SUPERAGENT TEAMS:\n    {workflows_desc}" if workflows else agents_desc
 
+        if not dynamic_agent_names and not workflows:
+             # Fallback if filter excluded everything (shouldn't happen in valid graph)
+             dynamic_agents_desc = "No specific agents available."
+
 
         # 2. Format History
         history_desc = "No history yet."
@@ -69,11 +96,23 @@ class OrchestratorService:
             # We use the strict AgentResult model here
             history_desc = "\n    ".join(
                 [
-                    f"- [{res.timestamp}] Task {res.task_id} completed. Summary: {res.summary[:300]}..."
+                    f"- [{res.timestamp}] Task {res.task_id} completed. Summary: {res.summary[:1000]}..."
                     for res in history
                 ]
             )
 
+        # 1b. Loop Prevention (Heuristic)
+        # If the last agent in history was a success, we strongly discourage running it again immediately
+        # unless it's a multi-step iterative process (which we assume is internal to the agent usually).
+        last_agent_name = None
+        if history:
+            last_agent_result = history[-1]
+            # Metadata might hold the true agent name if different from summary
+            last_agent_name = last_agent_result.metadata.get("agent", "") or last_agent_result.metadata.get("agent_role", "")
+            
+            # Simple normalization to match our list
+            # We don't remove it from 'valid choices' (in case of retry), but we instruct the LLM.
+            
         current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
         # 3. Construct Prompt
@@ -90,7 +129,7 @@ class OrchestratorService:
 
         Current Time: {current_time}
 
-        Available Agents & Tools:
+        Available Agents & Tools (YOU MUST CHOICE FROM THIS LIST ONLY):
         - QA: Quality Assurance & User Communication. SELECT THIS to finish the task, answer the user, or if you need to ask a clarifying question.
         - TOOLS: MCP Tool Executor. SELECT THIS to run specific tools (e.g., calendar, search, jira) if the request implies taking an action or fetching external data.
         - {", ".join(dynamic_agent_names)}
@@ -110,7 +149,8 @@ class OrchestratorService:
            - **Avoid Bottlenecks**: Do not assign a complex multi-domain task to a single generic agent if specialized agents are available.
         5. **DyLAN Strategy**: Use importance scores as a tie-breaker, but NEVER ignore a better-suited specialized agent (even with a lower score) if they are the best fit for a specific sub-task.
         6. **Context Check**: If the history shows an agent has just run, verify if their output needs downstream processing by a *different* agent.
-        7. **Termination**: If the task is fully complete and the user's last question is answered, select "QA" to finalize.
+        7. **LOOP PREVENTION**: The agent '{last_agent_name}' just ran. DO NOT select it again immediately unless it failed or explicitly requested a retry. If it completed its work, move to the next logical step or 'QA'.
+        8. **Termination**: If the task is fully complete and the user's last question is answered, select "QA" to finalize.
 
         Return ONLY the comma-separated list of selected agents (e.g. "RESEARCH_AGENT, WRITER_AGENT").
         """
@@ -132,6 +172,7 @@ class OrchestratorService:
                 f.write(f"History Count: {len(history)}\n")
                 if history:
                     f.write(f"Last Result: {history[-1].summary[:200]}\n")
+                f.write(f"Constraint: {allowed_node_names}\n")
                 f.write(f"LLM Raw Output: {decision_raw}\n")
         except Exception as e:
             print(f"Debug Log Error: {e}")

@@ -97,13 +97,14 @@ const CustomNode = ({ data }: { data: { label: string; type: string } }) => {
 
 interface ArchitectureVisualizerProps {
   config: GraphConfig;
+  onNodeClick?: (nodeId: string, nodeType: string, nodeLabel: string) => void;
 }
 
 const nodeTypes = {
   custom: CustomNode,
 };
 
-export function ArchitectureVisualizer({ config }: ArchitectureVisualizerProps) {
+export function ArchitectureVisualizer({ config, onNodeClick }: ArchitectureVisualizerProps) {
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     if (!config) return { nodes: [], edges: [] };
 
@@ -138,6 +139,11 @@ export function ArchitectureVisualizer({ config }: ArchitectureVisualizerProps) 
         onEdgesChange={onEdgesChange}
         fitView
         proOptions={{ hideAttribution: true }}
+        onNodeClick={(_, node) => {
+          if (onNodeClick) {
+            onNodeClick(node.id, node.data.type, node.data.label);
+          }
+        }}
       >
         <Background color="#ffffff" gap={20} size={1} style={{ opacity: 0.1 }} />
         <Controls className="border-white/10 bg-black/50" />

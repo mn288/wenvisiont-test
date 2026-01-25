@@ -64,16 +64,7 @@ class AsyncFileReadTool(BaseTool):
             return str(e)
 
         if not os.path.exists(full_path):
-            # Auto-create if not found to prevent agent loops
-            try:
-                directory = os.path.dirname(full_path)
-                if directory and not os.path.exists(directory):
-                    os.makedirs(directory)
-                with open(full_path, "w") as f:
-                    f.write("")
-                return ""  # Return empty content for new file
-            except Exception as e:
-                return f"Error creating missing file: {str(e)}"
+            return f"Error: File not found: {file_path}"
 
         try:
             with open(full_path, "r") as f:
@@ -98,20 +89,7 @@ class AsyncFileReadTool(BaseTool):
            exists = False
 
         if not exists:
-             # Auto-create if not found to prevent agent loops
-            try:
-                directory = os.path.dirname(full_path)
-                # Check dir existence async
-                try:
-                    await aios.stat(directory)
-                except OSError:
-                     await aios.makedirs(directory, exist_ok=True)
-                
-                async with aiofiles.open(full_path, mode="w") as f:
-                    await f.write("")
-                return "" # Return empty content for new file
-            except Exception as e:
-                return f"Error creating missing file: {str(e)}"
+             return f"Error: File not found: {file_path}"
 
         try:
             async with aiofiles.open(full_path, mode="r") as f:
@@ -175,7 +153,8 @@ class AsyncFileWriteTool(BaseTool):
             with open(full_path, mode=mode) as f:
                 f.write(content)
             print(f"DEBUG: AsyncFileWriteTool (Sync Fallback) wrote to: {full_path}")
-            return f"Successfully wrote to {file_path} (Absolute: {full_path})"
+
+            return f"Successfully wrote to {file_path}"
         except Exception as e:
             return f"Error writing file: {str(e)}"
 
@@ -199,6 +178,7 @@ class AsyncFileWriteTool(BaseTool):
             async with aiofiles.open(full_path, mode=mode) as f:
                 await f.write(content)
             print(f"DEBUG: AsyncFileWriteTool wrote to: {full_path}")
-            return f"Successfully wrote to {file_path} (Absolute: {full_path})"
+
+            return f"Successfully wrote to {file_path}"
         except Exception as e:
             return f"Error writing file: {str(e)}"
