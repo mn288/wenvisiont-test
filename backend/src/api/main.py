@@ -1,3 +1,4 @@
+import nest_asyncio
 from fastapi import FastAPI
 
 from api.v1.endpoints.agents import router as agents_router
@@ -12,6 +13,9 @@ from api.v1.endpoints.stats import router as stats_router
 from api.v1.endpoints.workflows import router as workflow_router
 from core.lifespan import lifespan
 from core.middleware import configure_middleware
+
+# Allow nested event loops for CrewAI sync tool wrappers
+nest_asyncio.apply()
 
 app = FastAPI(title="LangGraph-CrewAI Bridge", lifespan=lifespan)
 

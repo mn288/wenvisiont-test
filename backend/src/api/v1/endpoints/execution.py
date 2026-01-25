@@ -14,9 +14,18 @@ router = APIRouter()
 
 def _default_serializer(obj):
     from langchain_core.messages import BaseMessage
+    from langgraph.types import Command, Send
 
     if isinstance(obj, BaseMessage):
         return obj.dict()
+    if isinstance(obj, (Command, Send)):
+         # Convert to dict representation
+         # Command has 'goto', 'update', etc.
+         # Send has 'node', 'arg'
+         try:
+             return obj.__dict__
+         except Exception:
+             return str(obj)
     if hasattr(obj, "model_dump") and callable(obj.model_dump):
         return obj.model_dump()
     if hasattr(obj, "dict") and callable(obj.dict):

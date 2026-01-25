@@ -48,6 +48,10 @@ Common Patterns:
 """
 
 import asyncio
+
+# We mock the app import to avoid aggressive lifespan startup if needed,
+# but usually importing the app object is fine if we patch the pool before usage.
+import os
 from typing import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -55,8 +59,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-# We mock the app import to avoid aggressive lifespan startup if needed,
-# but usually importing the app object is fine if we patch the pool before usage.
+os.environ["WORKSPACE_ROOT"] = "/tmp/test_workspace"
 from api.main import app as original_app
 
 
@@ -101,7 +104,7 @@ def mock_db_connection(mock_db_cursor):
     return connection
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def db_pool_mock(mock_db_connection):
     """
     Patch the `pool` object in `core.database` (and `api.main` if imported there)
@@ -119,13 +122,13 @@ async def db_pool_mock(mock_db_connection):
     with (
         patch("core.database.pool", new=mock_pool),
         # patch("api.main.pool", new=mock_pool), # Removed from main
-        patch("api.v1.endpoints.mcp.pool", new=mock_pool),
         patch("api.v1.endpoints.execution.pool", new=mock_pool),
         patch("api.v1.endpoints.history.pool", new=mock_pool),
         patch("api.v1.endpoints.config_endpoints.pool", new=mock_pool),
         patch("api.v1.endpoints.stats.pool", new=mock_pool),
         patch("core.lifespan.pool", new=mock_pool),
         patch("brain.registry.pool", new=mock_pool),
+        patch("services.graph_service.pool", new=mock_pool),
     ):
         yield mock_pool
 
@@ -144,6 +147,43 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
         base_url="http://test",
     ) as ac:
         yield ac
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def mock_async_session(mock_db_cursor):
+    """
+    Patch `async_session_maker` for SQLModel based services.
+    This ensures that `async with async_session_maker() as session` works and returns a mock session.
+    """
+    # Create a Mock Session
+    mock_session = AsyncMock()
+    mock_session.exec = AsyncMock()
+
+    # exec returns a Result object which has .all(), .first()
+    mock_result = MagicMock()
+    mock_result.all.return_value = []
+    mock_result.first.return_value = None
+
+    mock_session.exec.return_value = mock_result
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    mock_session.delete = AsyncMock()
+
+    # The session_maker is a callable that returns an async context manager
+    # async with async_session_maker() as session:
+
+    # We need a MagicMock that returns an AsyncContextManager
+    mock_maker = MagicMock()
+    mock_maker.return_value.__aenter__.return_value = mock_session
+    mock_maker.return_value.__aexit__.return_value = None
+
+    with (
+        patch("core.database.async_session_maker", new=mock_maker),
+        patch("services.mcp.async_session_maker", new=mock_maker),
+        patch("api.dependencies.async_session_maker", new=mock_maker),  # For get_session dependency
+    ):
+        yield mock_session
 
 
 @pytest_asyncio.fixture

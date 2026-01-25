@@ -1,15 +1,24 @@
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+# CrewAI Imports
 from crewai import Agent, Task
 
+from brain.prompts import (
+    DEFAULT_CONTEXT_TEMPLATE,
+    DYNAMIC_AGENT_BACKSTORY,
+    DYNAMIC_AGENT_GOAL,
+    DYNAMIC_AGENT_ROLE,
+    DYNAMIC_AGENT_TASK,
+    STORAGE_PROTOCOL,
+)
 from core.database import pool
 from crew.agents import get_llm, llm
 
 # -------------------------------------------------------------------------
-# Schemas (Moved to models/agents.py)
+# Schemas
 # -------------------------------------------------------------------------
-from models.agents import NodeConfig
+from models.agents import AgentConfig, NodeConfig, TaskConfig
 from models.infrastructure import InfrastructureConfig
 
 # -------------------------------------------------------------------------
@@ -25,7 +34,6 @@ class AgentRegistry:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(AgentRegistry, cls).__new__(cls)
-            # Cannot async load here. Must be called explicitly on startup.
         return cls._instance
 
     async def load_agents(self):
@@ -40,7 +48,6 @@ class AgentRegistry:
                     for row in rows:
                         name, config_data = row
                         try:
-                            # Config is stored as JSON dict in DB
                             node_config = NodeConfig(**config_data)
                             self._agents[node_config.name] = node_config
                             print(f"Loaded agent node: {node_config.name}")
@@ -48,14 +55,88 @@ class AgentRegistry:
                             print(f"Error parsing agent {name}: {e}")
         except Exception as e:
             print(f"Error loading agents from DB: {e}")
-            
-        # Also load workflows and their defined agents
+
+        # ---------------------------------------------------------
+        # Dynamic Loading: MCP Servers as Standalone Agents
+        # ---------------------------------------------------------
+        try:
+            print("Loading dynamic MCP agents...")
+            from services.mcp import mcp_service
+
+            servers = await mcp_service.get_all_servers()
+
+            for server in servers:
+                safe_name = server.name.lower().replace(" ", "_").replace("-", "_")
+                agent_name = f"mcp_agent_{safe_name}"
+
+                if agent_name in self._agents:
+                    print(f"Skipping dynamic agent {agent_name} (Shadowed by DB agent)")
+                    continue
+
+                # Construct Dynamic Config via Adapter
+                from tools.adapter import MCPAdapter
+
+                tool_summary = "No specific tools listed."
+                try:
+                    adapter = MCPAdapter([server])
+                    tools = await adapter.get_tools()
+
+                    if tools:
+                        tool_desc_list = [f"- {t.name}: {t.description}" for t in tools]
+                        tool_summary = "\n".join(tool_desc_list)
+                    else:
+                        print(f"Warning: Server {server.name} returned 0 tools. Skipping agent creation.")
+                        continue
+
+                except Exception as tool_err:
+                    import logging
+
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Removing '{agent_name}' from registry because tool loading failed: {tool_err}")
+                    continue
+
+                # 1. Agent Config
+                agent_config = AgentConfig(
+                    role=DYNAMIC_AGENT_ROLE.format(server_name=server.name),
+                    goal=DYNAMIC_AGENT_GOAL.format(server_name=server.name),
+                    backstory=DYNAMIC_AGENT_BACKSTORY.format(server_name=server.name, tool_summary=tool_summary),
+                    mcp_servers=[server.name],
+                    files_access=True,
+                    use_reflection=False,
+                    task_domains=["tools", server.name.lower(), "execution"],
+                    importance_score=0.5,
+                    success_rate=1.0,
+                    max_iter=15,
+                )
+
+                # 2. Task Configuration
+                task_config = TaskConfig(
+                    description=DYNAMIC_AGENT_TASK.format(request="{request}"),
+                    expected_output="Result of the tool execution.",
+                    async_execution=False,
+                )
+
+                # 3. Node Configuration
+                node_config = NodeConfig(
+                    name=agent_name,
+                    display_name=f"ToolAgent_{server.name}",
+                    description=f"Agent with access to '{server.name}' tools.\nCapabilities:\n{tool_summary}",
+                    agent=agent_config,
+                    task=task_config,
+                )
+
+                self._agents[agent_name] = node_config
+                print(f"Loaded dynamic MCP agent: {agent_name} ({node_config.display_name})")
+
+        except Exception as e:
+            print(f"Error loading dynamic MCP agents: {e}")
+
         await self.load_workflows()
 
     async def load_workflows(self):
         """Load all workflows from the database into the cache."""
         from models.architect import GraphConfig
-        
+
         print("Loading workflows from Database...")
         self._workflows = {}
         try:
@@ -69,13 +150,12 @@ class AgentRegistry:
                             workflow_config = GraphConfig(**config_data)
                             self._workflows[workflow_config.name] = workflow_config
                             print(f"Loaded workflow: {workflow_config.name}")
-                            
-                            # Register internal agent definitions
+
                             if workflow_config.definitions:
                                 for agent_def in workflow_config.definitions:
                                     self._agents[agent_def.name] = agent_def
                                     print(f"Loaded workflow-defined agent: {agent_def.name}")
-                                    
+
                         except Exception as e:
                             print(f"Error parsing workflow {name}: {e}")
         except Exception as e:
@@ -83,16 +163,10 @@ class AgentRegistry:
 
     async def save_agent(self, config: NodeConfig):
         """Save or update an agent in the database and cache."""
-        # Update Cache
         self._agents[config.name] = config
-
-        # Persist to DB
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
-                # Upsert logic (Postgres 9.5+)
-                # We store the Pydantic dump as JSON
-                config_json = config.model_dump_json()  # Use json string for SQL param
-
+                config_json = config.model_dump_json()
                 await cur.execute(
                     """
                     INSERT INTO superagents (id, name, config, created_at, updated_at)
@@ -106,19 +180,15 @@ class AgentRegistry:
 
     async def save_workflow(self, config: Any):
         """Save or update a workflow in the database and cache."""
-        # Update Cache
         self._workflows[config.name] = config
-        
-        # Also register definitions immediately
-        if config.definitions:
-             for agent_def in config.definitions:
-                 self._agents[agent_def.name] = agent_def
 
-        # Persist to DB
+        if config.definitions:
+            for agent_def in config.definitions:
+                self._agents[agent_def.name] = agent_def
+
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
                 config_json = config.model_dump_json()
-
                 await cur.execute(
                     """
                     INSERT INTO workflows (id, name, config, created_at, updated_at)
@@ -131,26 +201,19 @@ class AgentRegistry:
             await conn.commit()
 
     async def delete_agent(self, name: str):
-        """Delete an agent from the database and cache."""
         if name in self._agents:
             del self._agents[name]
-
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("DELETE FROM superagents WHERE name = %s", (name,))
             await conn.commit()
 
     async def delete_workflow(self, name: str):
-        """Delete a workflow from the database and cache."""
         if name in self._workflows:
             workflow = self._workflows[name]
-            
-            # 1. Cascade Delete: Remove agents defined specifically by this workflow
             if workflow.definitions:
-                print(f"Cascade deleting {len(workflow.definitions)} agents for workflow {name}...")
                 for agent_def in workflow.definitions:
                     await self.delete_agent(agent_def.name)
-
             del self._workflows[name]
 
         async with pool.connection() as conn:
@@ -159,86 +222,32 @@ class AgentRegistry:
             await conn.commit()
 
     async def update_agent_success_rate(self, name: str, success: bool, alpha: float = 0.1):
-        """
-        Update agent success_rate using exponential moving average (DyLAN feedback loop).
-        
-        Args:
-            name: Agent name
-            success: Whether the task succeeded
-            alpha: Learning rate (0.1 = slow adaptation, 0.5 = fast adaptation)
-        """
         config = self.get_config(name)
         if not config:
             return
-        
-        # Exponential moving average: new_rate = alpha * outcome + (1 - alpha) * old_rate
         outcome = 1.0 if success else 0.0
         new_rate = alpha * outcome + (1 - alpha) * config.agent.success_rate
         config.agent.success_rate = round(new_rate, 2)
-        
-        # Persist updated config
         await self.save_agent(config)
 
     def reload(self):
-        """
-        Reload the registry.
-        WARNING: This is now async incompatible if called synchronously.
-        Ideally should be await reload().
-        For legacy compatibility, we might need a workaround or ensure callers await.
-        """
-        pass  # Deprecated sync reload. Use load_agents()
+        pass
 
     def get_all(self) -> List[NodeConfig]:
         return list(self._agents.values())
 
     def get_config(self, name: str) -> Optional[NodeConfig]:
-        """Get agent configuration by name."""
         return self._agents.get(name)
 
     async def _fetch_mcp_servers(self, server_names: List[str]) -> List[Any]:
-        """Fetch MCP server configurations from the database by name."""
-        from models.mcp import MCPServerConfig
+        from services.mcp import mcp_service
 
-        servers = []
-        if not server_names:
-            return servers
-
-        try:
-            async with pool.connection() as conn:
-                async with conn.cursor() as cur:
-                    # Construct query for specific names
-                    placeholders = ",".join(["%s"] * len(server_names))
-                    query = f"SELECT id, name, type, command, args, url, env FROM mcp_servers WHERE name IN ({placeholders})"
-                    await cur.execute(query, tuple(server_names))
-                    rows = await cur.fetchall()
-
-                    for row in rows:
-                        servers.append(
-                            MCPServerConfig(
-                                id=row[0],
-                                name=row[1],
-                                type=row[2],
-                                command=row[3],
-                                args=row[4] if row[4] else [],
-                                url=row[5],
-                                env=row[6] if row[6] else {},
-                            )
-                        )
-        except Exception as e:
-            print(f"Error fetching MCP servers: {e}")
-
-        return servers
+        return await mcp_service.get_servers_by_names(server_names)
 
     def get_workflows(self) -> List[Any]:
-        """Get all available workflows (Superagents) from cache."""
         return list(self._workflows.values())
 
     def validate_node_names(self, node_names: List[str]) -> List[str]:
-        """
-        Validate that a list of node names exists in the registry.
-        Returns a list of invalid names.
-        """
-        # Also check workflows
         workflow_names = [w.name for w in self.get_workflows()]
         valid_names = list(self._agents.keys()) + workflow_names
         return [name for name in node_names if name not in valid_names]
@@ -257,42 +266,45 @@ class AgentRegistry:
         # Resolve Tools
         agent_tools = []
 
-        # 1. MCP Tools
+        # 2. File Access (Via MCP)
+        if config.agent.files_access:
+            print(f"DEBUG: Agent {name} requires file access. Ensuring 'filesystem' MCP is loaded.")
+            if "filesystem" not in config.agent.mcp_servers:
+                config.agent.mcp_servers.append("filesystem")
+
+        # 3. S3 Access (Via MCP)
+        if config.agent.s3_access:
+            print(f"DEBUG: Agent {name} requires S3 access. Ensuring 's3' MCP is loaded.")
+            if "s3" not in config.agent.mcp_servers:
+                config.agent.mcp_servers.append("s3")
+
+        # Reload tools with new server list if needed
+        # (This implies a re-fetch if we modified the list... but simplest is to just fetch after modifying)
+
+        # ---------------------------------------------------------
+        # MCP TOOL LOADING (Consolidated)
+        # ---------------------------------------------------------
         if config.agent.mcp_servers:
             from tools.adapter import MCPAdapter
-            from tools.server import mcp
 
-            # Fetch configs from DB
             server_configs = await self._fetch_mcp_servers(config.agent.mcp_servers)
 
-            # Fallback/Hybrid: If "local" or "fastmcp" is requested but not in DB
-            if "fastmcp" in config.agent.mcp_servers or "local" in config.agent.mcp_servers:
-                if not any(s.name in ["fastmcp", "local"] for s in server_configs):
-                    server_configs.append(mcp)
-
             if server_configs:
-                adapter = MCPAdapter(server_configs)
-                mcp_tools = await adapter.get_tools()
-                agent_tools.extend(mcp_tools)
+                try:
+                    adapter = MCPAdapter(server_configs)
+                    mcp_tools = await adapter.get_tools()
+                    agent_tools.extend(mcp_tools)
+                except Exception as e:
+                    print(f"CRITICAL: Failed to load tools for agent {name} at runtime: {e}")
+                    # Do not raise hard error, allow agent to start without broken tools (or decide policy)
+                    # raise RuntimeError(f"Agent {name} failed initialization: MCP Connection Error: {e}")
+                    print("Continuing without some tools...")
 
-        # 2. File Access (Async)
-        if config.agent.files_access:
-            from tools.files import AsyncFileReadTool, AsyncFileWriteTool
+            if config.agent.mcp_servers and not mcp_tools and not agent_tools:
+                print(
+                    f"WARNING: Agent {name} requested MCP servers {config.agent.mcp_servers} but no tools were loaded."
+                )
 
-            # Determine root_dir from infra if available
-            root_dir = infra.local_workspace_path if infra else None
-
-            agent_tools.append(AsyncFileReadTool(root_dir=root_dir))
-            agent_tools.append(AsyncFileWriteTool(root_dir=root_dir))
-        # 3. S3 Access (Async)
-        if config.agent.s3_access:
-            from tools.s3 import AsyncS3ListBucketsTool, AsyncS3ReadTool, AsyncS3WriteTool
-
-            s3_conf = infra.s3_config if infra else None
-
-            agent_tools.append(AsyncS3ListBucketsTool(s3_config=s3_conf))
-            agent_tools.append(AsyncS3ReadTool(s3_config=s3_conf))
-            agent_tools.append(AsyncS3WriteTool(s3_config=s3_conf))
         print(f"DEBUG: Creating agent {name} with tools: {[t.name for t in agent_tools]}")
 
         # Instantiate LLM with callbacks if provided
@@ -303,15 +315,16 @@ class AgentRegistry:
             goal=config.agent.goal,
             backstory=config.agent.backstory,
             verbose=config.agent.verbose,
-            allow_delegation=False,  # CRITICAL: Force False to prevent competing orchestration
+            # allow_delegation=False,  <-- REMOVED: Deprecated/Noisy in recent versions.
             llm=agent_llm,
             tools=agent_tools,
-            # New CrewAI 2025 parameters
+            # callbacks=callbacks,  # REMOVED: Agent callbacks must be callables, not LangChain objects. LLM handles observability.
+            # CrewAI Limits
             max_iter=config.agent.max_iter,
             max_retry_limit=config.agent.max_retry_limit,
             max_execution_time=config.agent.max_execution_time,
             respect_context_window=config.agent.respect_context_window,
-            inject_date=config.agent.inject_date,
+            # inject_date=config.agent.inject_date, # Optional based on your config schema
         )
 
     def create_task(self, name: str, agent: Agent, inputs: Dict[str, Any] = {}) -> Optional[Task]:
@@ -321,33 +334,28 @@ class AgentRegistry:
             return None
 
         description = config.task.description
-        # Enforce Storage Instructions
-        storage_instructions = []
-        if config.agent.files_access:
-            storage_instructions.append(
-                "- To save files locally, you MUST use the 'AsyncFileWriteTool'. Do not print code/content; write it to a file."
-            )
-        if config.agent.s3_access:
-            storage_instructions.append(
-                "- To save files to S3, you MUST use the 'AsyncS3WriteTool'.\n- To read files from S3, you MUST use the 'AsyncS3ReadTool'.\n- To list S3 buckets, you MUST use the 'AsyncS3ListBucketsTool'.\n- To delete files from S3, you MUST use the 'AsyncS3DeleteObjectTool'.\n- To update files in S3, you MUST use the 'AsyncS3UpdateObjectTool'."
-            )
 
-        if storage_instructions:
-            header = "\n\nCRITICAL STORAGE INSTRUCTIONS:\n"
-            full_instruction = header + "\n".join(storage_instructions)
-
-            # Avoid duplication if already present (simple check)
-            if "CRITICAL STORAGE INSTRUCTIONS" not in description:
-                description += full_instruction
+        # Enforce Storage Instructions (v2.0 Protocol)
+        # Note: registry.create_task handles instantiation, likely without specific thread_id context yet.
+        # We use DEFAULT_CONTEXT_TEMPLATE.
+        if config.agent.files_access or config.agent.s3_access:
+            if "<data_persistence_protocol>" not in description:
+                protocol_text = STORAGE_PROTOCOL.format(specific_context=DEFAULT_CONTEXT_TEMPLATE)
+                description += f"\n\n{protocol_text}"
 
         try:
             description = description.format(**inputs)
         except KeyError:
             pass
 
+        # Handle fallback for expected_output (Required in new CrewAI)
+        expected_output = config.task.expected_output
+        if not expected_output:
+            expected_output = "A detailed result based on the task description."
+
         return Task(
             description=description,
             agent=agent,
-            expected_output=config.task.expected_output,
+            expected_output=expected_output,
             async_execution=config.task.async_execution,
         )

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { LogEntry, fetchStepHistory, fetchTopology } from '@/lib/api';
+import { LogEntry, fetchStepHistory, fetchTopology, listAgentsSummary } from '@/lib/api';
 import { reconstructStateFromLogs, VisitedNode } from '@/lib/state-utils';
 
 const THREAD_ID_STORAGE_KEY = 'wenvision_active_thread_id';
@@ -63,12 +63,10 @@ export const useOrchestrator = () => {
 
   // Fetch agents on mount
   useEffect(() => {
-    fetch('http://localhost:8000/agents')
-      .then((res) => res.json())
+    listAgentsSummary()
       .then((data) => {
         const map: Record<string, { role: string; label: string }> = {};
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data.forEach((agent: any) => {
+        data.forEach((agent) => {
           map[agent.id] = { role: agent.role, label: agent.label };
         });
         setAgentRegistry(map);
@@ -149,15 +147,31 @@ export const useOrchestrator = () => {
           setIsPaused(false);
           setActiveNodes([]);
           setActiveAgent(null);
+
+          const doneMsg = 'Done.';
+
+          // Update logs
           setLogs((prev) => [
             ...prev,
             {
               id: crypto.randomUUID(),
               timestamp: new Date(),
-              type: 'node-end',
-              message: 'Task Execution Completed Successfully.',
+              type: 'output',
+              message: doneMsg,
+              node: 'qa',
             },
           ]);
+
+          // Update content (Report View) to match refresh behavior
+          setStreamedContent((prev) => {
+            const newContent = (prev['qa'] || '') + '\n\n' + doneMsg;
+            return {
+              ...prev,
+              qa: newContent,
+            };
+          });
+          setFinalResponse((prev) => (prev || '') + '\n\n' + doneMsg);
+
           return;
         }
 

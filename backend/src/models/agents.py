@@ -9,6 +9,7 @@ from sqlmodel import JSON, Column, Field, SQLModel
 # Shared Schemas (Moved from registry.py)
 # -------------------------------------------------------------------------
 
+
 class AgentConfig(BaseModel):
     role: str
     goal: str
@@ -27,7 +28,9 @@ class AgentConfig(BaseModel):
     inject_date: bool = True
     # DyLAN-style dynamic agent selection (arXiv:2310.02170)
     importance_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Agent importance weight for routing")
-    task_domains: List[str] = Field(default_factory=list, description="Domain keywords e.g. ['code', 'research', 'analysis']")
+    task_domains: List[str] = Field(
+        default_factory=list, description="Domain keywords e.g. ['code', 'research', 'analysis']"
+    )
     success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Historical task success rate")
     use_reflection: bool = Field(default=False, description="Enable self-correction/reflection step")
     # MetaGPT-style SOP (arXiv:2308.00352)
@@ -52,6 +55,7 @@ class NodeConfig(BaseModel):
 # -------------------------------------------------------------------------
 # Database Models
 # -------------------------------------------------------------------------
+
 
 class SuperAgent(SQLModel, table=True):
     """

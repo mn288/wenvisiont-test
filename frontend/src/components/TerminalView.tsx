@@ -44,6 +44,7 @@ const getIconForType = (type: LogEntry['type'], node?: string) => {
     case 'system':
       return Terminal;
     case 'node-end':
+    case 'output': // Treat output same as node-end for now
       return CheckCircle2;
     default:
       return Terminal;
@@ -159,7 +160,7 @@ export function TerminalView({ logs, streamedContent, onLogClick }: TerminalView
                 log.type === 'error' && 'bg-red-500/5 font-bold text-red-400',
                 log.type === 'info' && 'text-amber-300',
                 log.type === 'system' && 'text-muted-foreground italic',
-                log.type === 'node-end' && 'text-green-400'
+                (log.type === 'node-end' || log.type === 'output') && 'text-green-400'
               )}
             >
               <span className="text-muted-foreground/30 mt-0.5 min-w-[70px] font-mono text-[10px] select-none">

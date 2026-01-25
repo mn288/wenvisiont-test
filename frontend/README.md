@@ -1,10 +1,13 @@
-# Antigravity Frontend
+# AWP Frontend
 
 Modern AI Agent Interface built with **Next.js 16**, **React 19**, and **TailwindCSS v4**.
 
 ## ✨ Features
 
-- **Agent Studio**: A visual, node-based editor for designing Agent workflows (`ReactFlow`).
+- **Agent Studio**: A visual, node-based editor for designing and monitoring Agent workflows.
+  - Powerd by `ReactFlow` with `Dagre` for automatic Mesh/Lane layout optimization.
+  - **Live Execution Tracking**: Visualizes active paths, running states, and failures in real-time.
+  - **Time Travel**: Fork/Rerun conversations from any previous step with modified inputs.
 - **Smart Chat**: Real-time streaming chat interface for interacting with the Swarm.
 - **Observability Dashboard**: Integrated views for tracing and debugging agent actions.
 - **Dynamic UI**: Fluid animations and highly responsive design using Framer Motion.
@@ -59,4 +62,4 @@ Modern AI Agent Interface built with **Next.js 16**, **React 19**, and **Tailwin
 
 ---
 
-Part of the **Antigravity** System.
+Part of the **AWP** System.

@@ -16,6 +16,49 @@ services:
     volumes:
       - app_db_data:/var/lib/postgresql/data
 
+  # --- NEW SERVICES: MCP SERVERS ---
+  mcp-math:
+    build: ./mcp-server
+    command: uvicorn server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8004:8000"
+    environment:
+      - PORT=8000
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  filesystem-mcp:
+    build: ./mcp-server
+    command: uvicorn filesystem:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8001:8000"
+    environment:
+      - FILESYSTEM_ROOT=/app/data
+    volumes:
+      - ./data:/app/data
+
+  s3-mcp:
+    build: ./mcp-server
+    command: uvicorn s3:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8002:8000"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+
+  analysis-mcp:
+    build: ./mcp-server
+    command: uvicorn analysis:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8003:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+  # ------------------------------------
+
   backend:
     build: .
     volumes:
@@ -44,12 +87,22 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_API_BASE=${OPENAI_API_BASE}
       - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
+      # --- CONNECT BACKEND TO MCP ---
+      # This URL tells your agent where the SSE stream is
+      - MCP_MATH_SERVER_URL=http://mcp-math:8000/sse
+      # ------------------------------
     depends_on:
       app-db:
         condition: service_healthy
       langfuse-server:
         condition: service_healthy
       langfuse-worker:
+        condition: service_started
+      mcp-math:
+        condition: service_started
+      filesystem-mcp:
+        condition: service_started
+      s3-mcp:
         condition: service_started
     # command: uv run uvicorn src.api.main:app --host 0.0.0.0 --reload
 

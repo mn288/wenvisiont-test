@@ -8,11 +8,14 @@
   --font-mono: var(--font-geist-mono);
 
   /* Modern/Clean Palette */
-  --color-background: #09090b; /* Zinc 950 */
-  --color-foreground: #fafafa; /* Zinc 50 */
+  --color-background: #09090b;
+  /* Zinc 950 */
+  --color-foreground: #fafafa;
+  /* Zinc 50 */
 
   /* Primary: Deep Indigo/Violet */
-  --color-primary: #6366f1; /* Indigo 500 */
+  --color-primary: #6366f1;
+  /* Indigo 500 */
   --color-primary-foreground: #ffffff;
   --color-primary-50: #eef2ff;
   --color-primary-100: #e0e7ff;
@@ -26,21 +29,26 @@
   --color-primary-900: #312e81;
 
   /* Secondary: Teal */
-  --color-secondary: #0d9488; /* Teal 600 */
+  --color-secondary: #0d9488;
+  /* Teal 600 */
   --color-secondary-foreground: #ffffff;
 
   /* Accent: Rose */
-  --color-accent: #e11d48; /* Rose 600 */
+  --color-accent: #e11d48;
+  /* Rose 600 */
   --color-accent-foreground: #ffffff;
 
   /* UI Elements */
-  --color-card: #18181b; /* Zinc 900 */
+  --color-card: #18181b;
+  /* Zinc 900 */
   --color-card-foreground: #f4f4f5;
 
-  --color-muted: #27272a; /* Zinc 800 */
+  --color-muted: #27272a;
+  /* Zinc 800 */
   --color-muted-foreground: #a1a1aa;
 
-  --color-border: #27272a; /* Zinc 800 */
+  --color-border: #27272a;
+  /* Zinc 800 */
   --color-input: #27272a;
 
   --radius-xl: 1rem;
@@ -207,6 +215,7 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }

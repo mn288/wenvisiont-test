@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
-import { Settings, Loader2, CheckCircle2, XCircle, Plus, Trash2 } from 'lucide-react';
+import { Settings, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import {
   getInfrastructureConfig,
   updateInfrastructureConfig,
@@ -14,17 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MCPSettings } from './MCPSettings';
 
-// MCP Types
-interface MCPServer {
-  id: number;
-  name: string;
-  type: 'stdio' | 'sse' | 'https';
-  command?: string;
-  args?: string[];
-  url?: string;
-  env?: Record<string, string>;
-}
+// MCP Types (Moved to lib/api/mcp.ts or unused here)
+// interface MCPServer { ... }
 
 export const SettingsDrawer = () => {
   const [open, setOpen] = useState(false);
@@ -37,15 +30,6 @@ export const SettingsDrawer = () => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
-  // MCP State
-  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const [mcpLoading, setMcpLoading] = useState(false);
-  const [newServer, setNewServer] = useState<Partial<MCPServer>>({
-    name: '',
-    type: 'https',
-    url: '',
-  });
-
   // Infra Config State
   const [infraConfigText, setInfraConfigText] = useState('');
   const [infraLoading, setInfraLoading] = useState(false);
@@ -53,7 +37,7 @@ export const SettingsDrawer = () => {
   useEffect(() => {
     if (open) {
       loadConfig();
-      fetchMcpServers();
+      // fetchMcpServers(); // Handled by component
       loadInfraConfig();
     }
   }, [open]);
@@ -92,21 +76,6 @@ export const SettingsDrawer = () => {
     }
   };
 
-  const fetchMcpServers = async () => {
-    setMcpLoading(true);
-    try {
-      const res = await fetch('http://localhost:8000/mcp/servers');
-      if (res.ok) {
-        const data = await res.json();
-        setMcpServers(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch servers:', error);
-    } finally {
-      setMcpLoading(false);
-    }
-  };
-
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -126,44 +95,6 @@ export const SettingsDrawer = () => {
       setStatus('success');
     } catch {
       setStatus('error');
-    }
-  };
-
-  const handleAddMcpServer = async () => {
-    try {
-      const payload = {
-        name: newServer.name,
-        type: 'https',
-        url: newServer.url,
-      };
-
-      const res = await fetch('http://localhost:8000/mcp/servers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        fetchMcpServers();
-        setNewServer({ name: '', type: 'https', url: '' });
-      } else {
-        const err = await res.text();
-        alert(`Error: ${err}`);
-      }
-    } catch (error) {
-      console.error('Failed to add server:', error);
-    }
-  };
-
-  const handleDeleteMcpServer = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this server?')) return;
-    try {
-      const res = await fetch(`http://localhost:8000/mcp/servers/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setMcpServers(mcpServers.filter((s) => s.id !== id));
-      }
-    } catch (error) {
-      console.error('Failed to delete server:', error);
     }
   };
 
@@ -262,63 +193,8 @@ export const SettingsDrawer = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="mcp" className="mt-4 space-y-4">
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Server Name</Label>
-                <Input
-                  value={newServer.name}
-                  onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
-                  placeholder="My Server"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>HTTPS URL</Label>
-                <Input
-                  value={newServer.url}
-                  onChange={(e) => setNewServer({ ...newServer, url: e.target.value })}
-                  placeholder="https://my-mcp-server.com/sse"
-                />
-              </div>
-            </div>
-
-            <Button
-              onClick={handleAddMcpServer}
-              className="w-full"
-              disabled={!newServer.name || !newServer.url}
-            >
-              <Plus size={16} className="mr-2" /> Add Server
-            </Button>
-
-            <div className="border-border/40 space-y-2 border-t pt-4">
-              <h4 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                Configured Servers
-              </h4>
-              {mcpLoading && <p className="text-muted-foreground text-xs">Loading...</p>}
-              {!mcpLoading && mcpServers.length === 0 && (
-                <p className="text-muted-foreground text-xs">No servers configured.</p>
-              )}
-
-              {mcpServers.map((server) => (
-                <div
-                  key={server.id}
-                  className="bg-muted/20 border-border/40 flex items-center justify-between rounded-md border p-2.5"
-                >
-                  <div>
-                    <div className="text-sm font-medium">{server.name}</div>
-                    <div className="text-muted-foreground font-mono text-[10px]">
-                      {server.type} • {server.url}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteMcpServer(server.id)}
-                    className="text-muted-foreground p-1 transition-colors hover:text-red-400"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
+          <TabsContent value="mcp" className="mt-4">
+            <MCPSettings />
           </TabsContent>
 
           <TabsContent value="local">

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>architecture.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="awp-cognitive-architecture">AWP Cognitive Architecture</h1>
+<h2 id="executive-technical-overview">Executive Technical Overview</h2>
+<p><strong>Subject:</strong> Next-Gen Agentic Orchestration &amp; Industrialized GenAI Flow</p>
+<h3 id="1-the-paradigm-shift-from-chains-to-cyclic-graphs">1. The Paradigm Shift: From Chains to Cyclic Graphs</h3>
+<p>The AWP Architecture represents a departure from brittle, linear LLM chains towards a robust, <strong>Cyclic State Graph</strong>. By leveraging <strong>Semantic Orchestration</strong> and <strong>Deterministic State Machines</strong>, the system moves beyond simple &quot;chatbots&quot; into the realm of <strong>Autonomous Multi-Agent Systems (MAS)</strong> capable of complex, multi-step problem solving.</p>
+<p>This platform is an <strong>Industrialized GenAI Operating System</strong> prioritizing <strong>Reliability and Correctness</strong> over raw speed.</p>
+<hr>
+<h3 id="2-high-level-architecture-the-%22brain%22-core">2. High-Level Architecture: The &quot;Brain&quot; Core</h3>
+<p>The core execution environment relies on a compiled <strong>StateGraph</strong> (powered by LangGraph) that manages the lifecycle of a request. This ensures type-safe state transitions, distributed checkpointing (via Postgres), and resumable execution workflows.</p>
+<h4 id="the-core-loop-reflexion-pattern"><strong>The Core Loop (Reflexion Pattern)</strong></h4>
+<p>The system implements an advanced variation of the standard &quot;Plan-and-Execute&quot; pattern, internally referred to as <strong>&quot;ReAct ++&quot;</strong> (ReAct with Integrated Reflexion):</p>
+<ol>
+<li><strong>Ingestion &amp; Preprocessing</strong>: Raw requests are normalized and semantically enriched.</li>
+<li><strong>The Supervisor (The &quot;Brain&quot;)</strong>: A central routing node that formulates a <strong>Strategic Plan</strong>. It utilizes <strong>DyLAN (Dynamic Learning Agent Network)</strong> heuristics to select the highest-performing agents.</li>
+<li><strong>The Agentic Graph</strong>: A dynamic layer of specialized &quot;Atomic Agents&quot; (Workers) and &quot;Superagent Teams&quot; (Subgraphs).</li>
+<li><strong>Tri-State Reflection</strong>: Agents critique their own work (Approved, Fixed, Rejected) <em>before</em> submission, catching errors early.</li>
+<li><strong>Aggregation &amp; QA</strong>: A final consolidation layer ensuring the output meets strict schema requirements.</li>
+</ol>
+<hr>
+<h3 id="3-orchestration-flow-semantic-decision-engine">3. Orchestration Flow: Semantic Decision Engine</h3>
+<p>The <strong>OrchestratorService</strong> serves as the system's prefrontal cortex. It replaces hard-coded logic with <strong>Probabilistic Decision Making</strong> constrained by strict schemas.</p>
+<ul>
+<li><strong>Context-Aware Routing</strong>: The Orchestrator analyzes the <strong>Global Shared State</strong> (not just the last message) to determine the <em>Next Best Action</em>.</li>
+<li><strong>Structured Output Enforcement</strong>: All decisions are emitted as strictly typed Pydantic models.</li>
+<li><strong>DyLAN Scoring (Experimental)</strong>: A capability registry that ranks agents based on historical success rates. <em>Note: Currently utilizes heuristic feedback loops to minimize &quot;judging&quot; bias.</em></li>
+</ul>
+<hr>
+<h3 id="4-execution-flow-the-%22worker%22--mcp-integration">4. Execution Flow: The &quot;Worker&quot; &amp; MCP Integration</h3>
+<p>Execution is about instantiating an ephemeral <strong>Worker Context</strong> that solves a specific slice of the problem.</p>
+<h4 id="protocol-model-context-protocol-mcp"><strong>Protocol: Model Context Protocol (MCP)</strong></h4>
+<p>We utilize <strong>FastMCP</strong> (Anthropic Standard) to standardize tool exposure. This decouples the &quot;Intelligence&quot; (LLM) from the &quot;Capabilities&quot; (Tools).</p>
+<ul>
+<li><strong>Universal Tooling</strong>: Capabilities like <code>filesystem</code> or <code>s3</code> are hot-swappable via distinct MCP servers.</li>
+</ul>
+<h4 id="voyager-skill-library-beta"><strong>Voyager Skill Library (Beta)</strong></h4>
+<p>Successful code executions are vectorized and stored in a <strong>Semantic Skill Library</strong>.</p>
+<ul>
+<li><em>Risk Mitigation</em>: To prevent &quot;Context Pollution&quot; and &quot;Code Rot&quot;, the library implements strict expiry policies and relevance filtering (k=3), forcing agents to adapt old patterns rather than copy-paste blindly.</li>
+</ul>
+<h4 id="the-self-correction-loop"><strong>The Self-Correction Loop</strong></h4>
+<ol>
+<li><strong>Draft</strong>: Agent generates a solution.</li>
+<li><strong>Critique</strong>: The <code>REFLECTION</code> prompt analyzes the output against the request.</li>
+<li><strong>Refine</strong>: The agent auto-fixes syntax errors or logic gaps.</li>
+</ol>
+<hr>
+<h3 id="5-performance--latency-the-%22industrial-tax%22">5. Performance &amp; Latency (The &quot;Industrial Tax&quot;)</h3>
+<p>Unlike real-time chatbots, this architecture is designed as an <strong>Asynchronous Job Processor</strong>.</p>
+<ul>
+<li><strong>Latency Cost</strong>: A single high-complexity request involves multiple LLM hops (Orchestrator -&gt; Worker -&gt; Reflector -&gt; QA).</li>
+<li><strong>Budget Estimation</strong>: multi-step tasks may take <strong>30-60 seconds</strong>.</li>
+<li><strong>Justification</strong>: The tradeoff is <strong>Accuracy</strong>. By &quot;thinking fast and slow&quot; (System 2 thinking), we reduce hallucination rates for critical enterprise tasks.</li>
+</ul>
+<hr>
+<h3 id="6-node-flow-the-graph-topology">6. Node Flow: The Graph Topology</h3>
+<p>The architecture is defined by a directed cyclic graph with the following topology:</p>
+<pre><code class="language-mermaid"><div class="mermaid">graph TD
+    Start((Start)) --> Preprocess
+    Preprocess --> Supervisor{Supervisor}
+    
+    subgraph "Agentic Graph"
+        Supervisor -->|Route| Agent_A[Coding Agent]
+        Supervisor -->|Route| Agent_B[Research Agent]
+        Supervisor -->|Route| Team_X[DevOps Subgraph]
+    end
+    
+    Agent_A -->|Shared State| Supervisor
+    Agent_B -->|Shared State| Supervisor
+    Team_X -->|Shared State| Supervisor
+    
+    Supervisor -->|Task Complete| QA[Quality Assurance]
+    QA --> End((End))
+</div></code></pre>
+<ul>
+<li><strong>Shared State</strong>: All nodes read/write to a global Postgres-backed state object, preventing &quot;telephone game&quot; data loss between layers.</li>
+</ul>
+<hr>
+<h3 id="appendix-cognitive-glossary">Appendix: Cognitive Glossary</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Term</th>
+<th style="text-align:left">Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>ReAct ++</strong></td>
+<td style="text-align:left"><em>Internal Nomenclature</em>. An evolution of the standard ReAct loop that adds <strong>Tri-State Reflection</strong> (Self-Correction) and <strong>Strategic Planning</strong>, effectively implementing the &quot;Reflexion&quot; paper pattern.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Cyclic State Graph</strong></td>
+<td style="text-align:left">The network of interconnected agents and subgraphs (powered by LangGraph) allowing for non-linear, cyclic problem solving (loops) rather than linear chains.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>DyLAN</strong></td>
+<td style="text-align:left"><em>Dynamic Learning Agent Network</em>. A heuristic scoring system to rank agent effectiveness. Currently utilizes binary success/failure signals to bias agent selection.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>FastMCP</strong></td>
+<td style="text-align:left">Implementation of the <em>Model Context Protocol</em>, standardizing tool exposure and decoupling &quot;Brain&quot; from &quot;Tools&quot;.</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Voyager Library</strong></td>
+<td style="text-align:left">A semantic long-term memory store for code patterns. Implements &quot;RAG for Logic&quot; to bootstrap agents with past solutions.</td>
+</tr>
+</tbody>
+</table>
+
+</body>
+</html>

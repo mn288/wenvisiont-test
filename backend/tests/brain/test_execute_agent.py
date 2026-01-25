@@ -22,9 +22,9 @@ async def test_execute_agent_node_crew_output():
     }
 
     with (
-        patch("brain.nodes.crew_service") as mock_service,
-        patch("brain.nodes.infrastructure_service") as mock_infra_service,
-        patch("brain.nodes.LogHandler") as mock_logger,
+        patch("brain.nodes.execution.crew_service") as mock_service,
+        patch("brain.nodes.execution.infrastructure_service") as mock_infra_service,
+        patch("brain.nodes.execution.LogHandler") as mock_logger,
     ):
         mock_service.execute_task = AsyncMock(return_value=mock_result)
         mock_infra_service.get_or_create_infrastructure.return_value = {}
@@ -48,8 +48,9 @@ async def test_execute_agent_node_crew_output():
         assert len(result["results"]) == 1
         output_item = result["results"][0]
 
-        assert output_item["summary"] == "Summary of content"
-        assert output_item["raw_output"] == "Generated Content"
+        # Note: execute_agent_node adds SUCCESS prefix for grounding
+        assert "Summary of content" in output_item["summary"]
+        assert "Generated Content" in output_item["raw_output"]
 
 
 @pytest.mark.asyncio
@@ -67,9 +68,9 @@ async def test_execute_agent_node_research_output():
     }
 
     with (
-        patch("brain.nodes.crew_service") as mock_service,
-        patch("brain.nodes.infrastructure_service"),
-        patch("brain.nodes.LogHandler") as mock_logger,
+        patch("brain.nodes.execution.crew_service") as mock_service,
+        patch("brain.nodes.execution.infrastructure_service"),
+        patch("brain.nodes.execution.LogHandler") as mock_logger,
     ):
         mock_service.execute_task = AsyncMock(return_value=mock_result)
         mock_logger.return_value.log_step = AsyncMock()
@@ -88,9 +89,8 @@ async def test_execute_agent_node_research_output():
 
         # Verify
         assert "results" in result
-        # The new implementation returns a 'results' list, not specific string keys like 'research_output'
-        # The test update reflects the change in nodes.py returning generic "results"
-        assert result["results"][0]["summary"] == "Summary of findings"
+        # Note: execute_agent_node adds SUCCESS prefix for grounding
+        assert "Summary of findings" in result["results"][0]["summary"]
 
 
 @pytest.mark.asyncio
@@ -104,9 +104,9 @@ async def test_execute_agent_node_custom_key_fallback():
     mock_result.model_dump.return_value = {"summary": "Summary of plan", "raw_output": "Strategic Plan", "metadata": {}}
 
     with (
-        patch("brain.nodes.crew_service") as mock_service,
-        patch("brain.nodes.infrastructure_service"),
-        patch("brain.nodes.LogHandler") as mock_logger,
+        patch("brain.nodes.execution.crew_service") as mock_service,
+        patch("brain.nodes.execution.infrastructure_service"),
+        patch("brain.nodes.execution.LogHandler") as mock_logger,
     ):
         mock_service.execute_task = AsyncMock(return_value=mock_result)
         mock_logger.return_value.log_step = AsyncMock()
@@ -125,4 +125,5 @@ async def test_execute_agent_node_custom_key_fallback():
 
         # Verify
         assert "results" in result
-        assert result["results"][0]["summary"] == "Summary of plan"
+        # Note: execute_agent_node adds SUCCESS prefix for grounding
+        assert "Summary of plan" in result["results"][0]["summary"]

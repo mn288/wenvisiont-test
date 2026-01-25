@@ -1,0 +1,7 @@
+mcp
+uvicorn
+fastapi
+aiofiles
+aioboto3
+polars
+orjson

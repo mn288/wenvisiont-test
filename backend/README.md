@@ -1,4 +1,4 @@
-# Antigravity Backend
+# AWP Backend
 
 High-performance AI Agent Orchestration Service built with **FastAPI**, **LangGraph**, and **CrewAI**.
 
@@ -9,13 +9,14 @@ The backend implements a sophisticated **Hierarchical Supervisor Swarm** archite
 ### Key Patterns
 1.  **Orchestrator (LangGraph)**:
     - A stateful graph (`src/brain/nodes.py`) acts as the "Brain".
-    - Uses a **Supervisor Node** to route tasks to specific agents or teams.
-    - Maintains conversation state and history using `langgraph-checkpoint-postgres`.
+    - Uses a **Supervisor Node** returning `Command` objects for dynamic routing to atomic agents OR **Superagent Teams**.
+    - **DyLAN (Dynamic Layout of Agents)** Strategy: Agents are ranked dynamically by importance and success rate during selection.
+    - **Circuit Breaker**: Detects and breaks infinite loops or repetitive failures, routing to human (QA) intervention.
 
 2.  **Worker Agents (CrewAI)**:
     - Individual agents are defined using **CrewAI** (`src/crew/`).
     - Agents operate *asynchronously* for maximum throughput.
-    - Delegation is disabled at the agent level; the Supervisor handles all delegation logic.
+    - Includes **Self-Reflection** loops: Agents critique their own output before finishing.
 
 3.  **Mixture-of-Agents (MoA)**:
     - The final **QA Node** acts as an aggregator.
@@ -28,7 +29,8 @@ The backend implements a sophisticated **Hierarchical Supervisor Swarm** archite
 
 5.  **FastMCP Tool Bus**:
     - Tools are exposed via **Model Context Protocol (MCP)** using `fastmcp`.
-    - This creates a standardized, async interface for agents to interact with external resources.
+    - Supports both local and remote MCP servers through a unified `tool_planning_node` interface.
+    - Uses `orjson` for high-performance JSON parsing of complex tool arguments.
 
 ## 🛠 Technology Stack
 
@@ -85,4 +87,4 @@ Every execution is traced using **Langfuse**.
 - **Generations**: Track token usage and latency for every LLM call.
 
 ---
-Part of the **Antigravity** System.
+Part of the **AWP** System.

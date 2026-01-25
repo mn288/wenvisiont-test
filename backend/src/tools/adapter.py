@@ -11,10 +11,15 @@ try:
 except ImportError:
     MCPServerConfig = Any
 
+# Apply nest_asyncio to allow re-entrant event loops (Critical for FastAPI + CrewAI tools)
+import nest_asyncio
+
+nest_asyncio.apply()
 
 def _json_schema_to_pydantic(name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
     """
     Convert a JSON schema to a Pydantic model dynamically.
+    Refined to handle more complex nested structures if needed in future.
     """
     fields = {}
     properties = schema.get("properties", {})
@@ -29,6 +34,10 @@ def _json_schema_to_pydantic(name: str, schema: Dict[str, Any]) -> Type[BaseMode
             field_type = float
         elif t == "boolean":
             field_type = bool
+        elif t == "array":
+             field_type = List[Any]
+        elif t == "object":
+             field_type = Dict[str, Any]
 
         # Determine if required
         if field_name in required:
@@ -55,9 +64,9 @@ class CrewMCPTool(BaseTool):
     def _run(self, *args, **kwargs):
         """
         Execute the tool synchronously.
-        CRITICAL: This architecture is STRICT ASYNC. Sync execution is forbidden to prevent blocking the event loop.
+        Delegates to the sync wrapper.
         """
-        raise NotImplementedError("This tool is async-only. Use _arun to prevent blocking the event loop.")
+        return self._sync_tool_func(*args, **kwargs)
 
     async def _arun(self, *args, **kwargs):
         """Execute the tool asynchronously."""
@@ -68,11 +77,22 @@ class MCPAdapter:
     def __init__(self, servers: List[Union[FastMCP, MCPServerConfig]]):
         """
         Initialize with a list of servers.
-        Items can be:
-        - FastMCP instance (for local/in-memory)
-        - MCPServerConfig (for external stdio/sse)
         """
         self.servers = servers
+        self.clients = {} # Cache for reusable clients
+        
+    def _get_cached_client(self, server_conf):
+        """Get or create a cached client."""
+        # Identification key
+        if isinstance(server_conf, FastMCP):
+            key = f"fastmcp_{id(server_conf)}"
+        else:
+            key = f"{server_conf.type}_{server_conf.name}"
+            
+        if key not in self.clients:
+             self.clients[key] = self._create_client(server_conf)
+             
+        return self.clients[key]
 
     async def get_tools(self) -> List[BaseTool]:
         """
@@ -82,55 +102,95 @@ class MCPAdapter:
 
         for server_conf in self.servers:
             try:
-                # Determine how to connect based on type
-                client_context = self._get_client(server_conf)
+                # Use cached client context logic? 
+                # FastMCP/Client are ContextManagers.
+                # If we want to keep them open, we need to enter them once and not exit?
+                # For safety/simplicity in this fix, we still use context manager but reuse the object.
+                
+                # Create a temporary client just for listing (or reuse cached one if feasible)
+                # Note: listing tools is rare (startup), so standard context manager is fine here.
+                client_context = self._create_client(server_conf)
 
                 # We use the client temporarily to get schema
                 async with client_context as client:
                     mcp_tools = await client.list_tools()
 
                     for tool in mcp_tools:
-                        # Create Pydantic model for arguments
-                        args_schema = _json_schema_to_pydantic(tool.name, tool.inputSchema)
+                        try:
+                            # Create Pydantic model for arguments
+                            args_schema = _json_schema_to_pydantic(tool.name, tool.inputSchema)
 
-                        # Create the worker function
-                        # Capture server_conf in closure
-                        async def _tool_func(*args, tool_name=tool.name, _conf=server_conf, **kwargs):
-                            # Re-connect for execution
-                            # Optimization: Creating a new client/process for every call might be slow for stdio.
-                            # Ideally we should keep clients alive, but for simplicity/robustness we restart.
-                            async with self._get_client(_conf) as active_client:
-                                result = await active_client.call_tool(tool_name, arguments=kwargs)
-                                output = []
-                                if result.content:
-                                    for item in result.content:
-                                        if hasattr(item, "text"):
-                                            output.append(item.text)
-                                return "\n".join(output)
+                            # Create the worker function
+                            # Capture server_conf in closure
+                            async def _tool_func(*args, tool_name=tool.name, _conf=server_conf, **kwargs):
+                                # Re-connect for execution logic
+                                # Note: Ideally we keep the connection open.
+                                # Creating a NEW client object is safe but slow.
+                                # Using `nest_asyncio` fixes the crash.
+                                async with self._create_client(_conf) as active_client:
+                                    try:
+                                        print(f"DEBUG: Calling tool {tool_name} with args {kwargs}")
+                                        result = await active_client.call_tool(tool_name, arguments=kwargs)
+                                        output = []
+                                        if result.content:
+                                            for item in result.content:
+                                                if hasattr(item, "text"):
+                                                    output.append(item.text)
+                                        return "\n".join(output)
+                                    except Exception as e:
+                                        error_msg = str(e)
+                                        if len(error_msg) > 200:
+                                            error_msg = error_msg[:200] + "... (error truncated)"
+                                        
+                                        print(f"ERROR: Failed to execute tool {tool_name}: {error_msg}")
+                                        return f"Error executing tool {tool_name}: {error_msg}"
 
-                        # Sync wrapper
-                        def _sync_tool_func(*args, **kwargs):
-                            return asyncio.run(_tool_func(*args, **kwargs))
+                            # Sync wrapper with SAFE execution
+                            def _sync_tool_func(*args, _target=_tool_func, **kwargs):
+                                try:
+                                    loop = asyncio.get_running_loop()
+                                except RuntimeError:
+                                    loop = None
+                                
+                                if loop and loop.is_running():
+                                    # We are in a running loop (FastAPI).
+                                    # Since we applied nest_asyncio, we can use run_until_complete OR asyncio.run()
+                                    # BUT asyncio.run() creates a NEW loop.
+                                    # It's safer to use the existing loop if allowed by nest_asyncio.
+                                    import nest_asyncio
+                                    nest_asyncio.apply(loop)
+                                    return loop.run_until_complete(_target(*args, **kwargs))
+                                else:
+                                    return asyncio.run(_target(*args, **kwargs))
 
-                        # Use custom CrewMCPTool
-                        crew_tool = CrewMCPTool(
-                            sync_tool_func=_sync_tool_func,
-                            async_tool_func=_tool_func,
-                            name=tool.name,
-                            description=tool.description or "",
-                            args_schema=args_schema,
-                        )
-                        all_tools.append(crew_tool)
+                            # Use custom CrewMCPTool
+                            crew_tool = CrewMCPTool(
+                                sync_tool_func=_sync_tool_func,
+                                async_tool_func=_tool_func,
+                                name=tool.name,
+                                description=tool.description or "",
+                                args_schema=args_schema,
+                            )
+                            all_tools.append(crew_tool)
+
+                        except Exception as e:
+                            print(f"Error converting tool {tool.name}: {e}")
+                            continue
 
             except Exception as e:
-                import traceback
-
-                print(f"DEBUG: Error loading tools from server {server_conf}: {e}")
-                traceback.print_exc()
-
+                import logging
+                logger = logging.getLogger(__name__)
+                server_name = getattr(server_conf, "name", "unknown")
+                server_url = getattr(server_conf, "url", "unknown") if hasattr(server_conf, "url") else "stdio"
+                
+                logger.error(f"Failed to load tools from MCP server '{server_name}' ({server_url}). Error: {e}")
+                
+                # FAIL FAST: We propagate the error so the Registry knows this agent is broken.
+                raise RuntimeError(f"Critical: Could not load tools from server '{server_name}': {e}")
+        
         return all_tools
 
-    def _get_client(self, conf: Union[FastMCP, MCPServerConfig]):
+    def _create_client(self, conf: Union[FastMCP, MCPServerConfig]):
         """
         Helper to return a Client context manager based on config.
         """
@@ -139,8 +199,41 @@ class MCPAdapter:
 
         # It's an MCPServerConfig
         if conf.type == "stdio":
-            return Client(conf.command, args=conf.args, env=conf.env)  # fastmcp.Client supports command+args
-        elif conf.type == "sse" or conf.type == "https":
-            return Client(conf.url)
+            return Client(conf.command, args=conf.args, env=conf.env)  # fastmcp. Client supports command+args
+        if conf.type == "sse" or conf.type == "https":
+            return Client(conf.url, timeout=30)
         else:
             raise ValueError(f"Unknown server type: {conf.type}")
+
+    async def get_server_tools_map(self) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Connect to all servers and return a map of server_name -> list of tool metadata.
+        Used by the Architect to know what tools are available and where.
+        """
+        server_map = {}
+
+        for server_conf in self.servers:
+            try:
+                # Use name from config or fallback
+                server_name = getattr(server_conf, "name", "unknown")
+                
+                # Determine how to connect based on type
+                client_context = self._get_client(server_conf)
+
+                async with client_context as client:
+                    mcp_tools = await client.list_tools()
+                    
+                    tool_list = []
+                    for tool in mcp_tools:
+                        tool_list.append({
+                            "name": tool.name,
+                            "description": tool.description or "No description provided."
+                        })
+                    
+                    server_map[server_name] = tool_list
+
+            except Exception as e:
+                print(f"Error listing tools for server {getattr(server_conf, 'name', 'unknown')}: {e}")
+                server_map[getattr(server_conf, "name", "unknown")] = [{"error": str(e)}]
+        
+        return server_map

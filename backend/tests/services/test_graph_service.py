@@ -12,6 +12,7 @@ def mock_dependencies():
         patch("services.graph_service.build_workflow") as MockBuild,
         patch("services.graph_service.AsyncPostgresSaver") as MockSaver,
         patch("services.graph_service.pool") as MockPool,
+        patch("services.graph_service.AsyncConnection") as MockConnection,
     ):
         # Mock Workflow
         mock_workflow = MagicMock()
@@ -23,7 +24,13 @@ def mock_dependencies():
         mock_saver_instance = AsyncMock()
         MockSaver.return_value = mock_saver_instance
 
-        yield MockBuild, MockSaver, MockPool, mock_workflow, mock_saver_instance
+        # Mock Connection
+        MockConnection.connect = AsyncMock()
+        mock_conn_instance = AsyncMock()
+        MockConnection.connect.return_value = mock_conn_instance
+        mock_conn_instance.__aenter__.return_value = mock_conn_instance
+
+        yield MockBuild, MockSaver, MockPool, mock_workflow, mock_saver_instance, MockConnection
 
 
 @pytest.mark.asyncio
@@ -40,10 +47,11 @@ async def test_singleton_pattern():
 
 @pytest.mark.asyncio
 async def test_reload_graph_success(mock_dependencies):
-    MockBuild, MockSaver, MockPool, mock_workflow, mock_saver_instance = mock_dependencies
+    MockBuild, MockSaver, MockPool, mock_workflow, mock_saver_instance, MockConnection = mock_dependencies
 
     # Reset singleton to ensure clean state
     GraphService._instance = None
+    GraphService._tables_initialized = False
     service = GraphService.get_instance()
 
     # Should be None initially
@@ -63,7 +71,7 @@ async def test_reload_graph_success(mock_dependencies):
 
 @pytest.mark.asyncio
 async def test_get_graph_lazy_load(mock_dependencies):
-    MockBuild, MockSaver, MockPool, mock_workflow, mock_saver_instance = mock_dependencies
+    MockBuild, MockSaver, MockPool, mock_workflow, mock_saver_instance, MockConnection = mock_dependencies
 
     GraphService._instance = None
     service = GraphService.get_instance()

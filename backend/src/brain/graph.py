@@ -3,7 +3,6 @@ from functools import partial
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, StateGraph
-from langgraph.types import Send
 from psycopg_pool import AsyncConnectionPool
 
 from brain.nodes import (
@@ -30,13 +29,12 @@ def build_workflow() -> StateGraph:
     workflow = StateGraph(GraphState)
 
     workflow.add_node("preprocess", preprocess_node)
-    # workflow.add_node("router", router_node) # Deprecated
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("tool_planning", tool_planning_node)
     workflow.add_node("tool_execution", tool_execution_node)
     workflow.add_node("qa", qa_node)
     
-    RESERVED_NAMES = {"supervisor", "tool_planning", "tool_execution", "qa", "preprocess", "router"}
+    RESERVED_NAMES = {"supervisor", "tool_planning", "tool_execution", "qa", "preprocess"}
 
     print(f"DEBUG: Adding {len(registry.get_all())} agents...")
     # Dynamic Nodes (Atomic Agents)
@@ -61,28 +59,7 @@ def build_workflow() -> StateGraph:
 
     workflow.set_entry_point("preprocess")
 
-    # Direct to supervisor (skip legacy router)
     workflow.add_conditional_edges("preprocess", route_preprocess)
-
-    # Construct supervisor mapping
-    supervisor_map = {
-        "tools": "tool_planning",
-        "qa": "qa",
-    }
-    # Add dynamic agents to map
-    for node_config in registry.get_all():
-        supervisor_map[node_config.name] = node_config.name
-        
-    # Add workflows to map
-    for wf in registry.get_workflows():
-        supervisor_map[wf.name] = wf.name
-
-    print("DEBUG: Building conditional edges...")
-    workflow.add_conditional_edges(
-        "supervisor",
-        supervisor_decision,
-        supervisor_map,
-    )
 
     workflow.add_edge("tool_planning", "tool_execution")
     workflow.add_edge("tool_execution", "supervisor")
@@ -92,30 +69,12 @@ def build_workflow() -> StateGraph:
     return workflow
 
 
-# Direct to supervisor (skip legacy router)
+# Direct to supervisor
 def route_preprocess(state: GraphState):
     """Route after preprocessing."""
     if state.get("errors"):
         return END
     return "supervisor"
-
-
-def supervisor_decision(state: GraphState):
-    next_steps = state.get("next_step", [])
-    if not next_steps:
-        return "qa"
-
-    # If list (parallel support via Send)
-    if isinstance(next_steps, list):
-        # If single item, return string to use standard edge
-        if len(next_steps) == 1:
-            return next_steps[0]
-
-        # Parallel execution using Send
-        # We send the same state to all chosen agents
-        return [Send(node, state) for node in next_steps]
-
-    return next_steps  # Fallback if string
 
 
 # Helper to get the compiled graph with checkpointer (Legacy / Testing)

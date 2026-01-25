@@ -229,8 +229,8 @@ export default function StudioDashboard() {
             onDelete={async (name) => {
               try {
                 await deleteWorkflow(name);
-                setWorkflows((prev) => prev.filter((w) => w.name !== name));
-                setSelectedWorkflow(null);
+                // setWorkflows((prev) => prev.filter((w) => w.name !== name)); // Local update
+                window.location.reload(); // Full refresh as requested
               } catch (e) {
                 console.error('Failed to delete workflow:', e);
                 alert('Failed to delete workflow');

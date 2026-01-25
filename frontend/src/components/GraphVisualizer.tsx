@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -9,50 +9,68 @@ import ReactFlow, {
   Handle,
   Position,
   NodeProps,
+  MarkerType,
+  ConnectionLineType,
+  BaseEdge,
+  EdgeLabelRenderer,
+  EdgeProps,
+  getBezierPath,
+  getSmoothStepPath,
 } from 'reactflow';
-import 'reactflow/dist/style.css';
 import dagre from 'dagre';
-import { clsx } from 'clsx';
+import 'reactflow/dist/style.css';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import {
-  Activity,
   Brain,
   Cpu,
-  FileText,
-  ListStart,
-  Network,
-  RotateCcw,
-  Search,
-  ShieldCheck,
+  Layers,
+  LayoutTemplate,
+  Terminal,
+  ShieldAlert,
+  Zap,
   CheckCircle2,
-  AlertCircle,
+  GitBranch,
+  Search,
+  MessageSquare,
+  Database,
 } from 'lucide-react';
-import { VisitedNode } from '@/lib/state-utils';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 
-// --- Utils ---
+// --- Utility: Tailwind Merger ---
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
-const nodeWidth = 220;
-const nodeHeight = 80;
+// --- Types ---
+// Assuming the shape of your incoming data based on the screenshot/context
+export interface VisitedNode {
+  id: string;
+  label: string;
+  status: 'running' | 'completed' | 'failed' | 'pending';
+  timestamp: string;
+  checkpoint_id?: string;
+  parentCheckpointId?: string;
+  stepName?: string; // Optional context
+}
 
-const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => {
+interface GraphVisualizerProps {
+  visitedNodes: VisitedNode[];
+  activeNodes: string[]; // IDs of currently active steps
+  onStepClick: (step: { name: string; checkpointId?: string }) => void;
+  onRerun: (checkpointId: string, newInput?: string, stepName?: string) => void;
+}
+
+// --- 1. Layout Engine (The "No Overlap" Secret) ---
+// We use Dagre to calculate mathematically perfect positions
+const nodeWidth = 280;
+const nodeHeight = 100;
+
+const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  dagreGraph.setGraph({
-    rankdir: direction,
-    nodesep: 100, // Increased for better horizontal separation of forks
-    ranksep: 100, // Increased for better vertical/horizontal hierarchy
-  });
+  // Direction: Top to Bottom (TB). Ranksep: Gap between rows. Nodesep: Gap between nodes.
+  dagreGraph.setGraph({ rankdir: 'TB', ranksep: 120, nodesep: 60 });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
@@ -64,12 +82,13 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
   dagre.layout(dagreGraph);
 
-  const newNodes = nodes.map((node) => {
+  const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     return {
       ...node,
-      targetPosition: direction === 'LR' ? Position.Left : Position.Top,
-      sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
+      targetPosition: Position.Top,
+      sourcePosition: Position.Bottom,
+      // We pass the computed position to React Flow
       position: {
         x: nodeWithPosition.x - nodeWidth / 2,
         y: nodeWithPosition.y - nodeHeight / 2,
@@ -77,381 +96,353 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
     };
   });
 
-  return { nodes: newNodes, edges };
+  return { nodes: layoutedNodes, edges };
 };
 
-const getIconForNode = (label: string) => {
-  const lower = label.toLowerCase();
-  if (lower.includes('research')) return Search;
-  if (lower.includes('analyst') || lower.includes('analyze')) return FileText;
-  if (lower.includes('strateg')) return Network;
-  if (lower.includes('critic') || lower.includes('qa')) return ShieldCheck;
-  if (lower.includes('super')) return ListStart;
-  if (lower.includes('gate') || lower.includes('pre')) return Brain;
-  if (lower.includes('tool')) return Cpu;
-  return Activity;
-};
+// --- 2. Custom "Cyber" Node Component ---
 
-// --- Custom Components ---
+const CyberNode = React.memo(({ data, selected }: NodeProps) => {
+  const { label, status, type, timestamp, isLatest } = data;
 
-const CustomNode = React.memo(({ data, id }: NodeProps) => {
-  const IconComponent = getIconForNode(data.label);
-  const isRunning = data.status === 'running';
-  const isCompleted = data.status === 'completed';
-  const isFailed = data.status === 'failed';
-  const isActive = data.active;
+  const isRunning = status === 'running';
+  const isFailed = status === 'failed';
+  const isCompleted = status === 'completed';
+
+  // Dynamic Icon Selection
+  const getIcon = () => {
+    const l = label.toLowerCase();
+    if (l.includes('supervisor')) return <Brain className="text-cyan-400" size={24} />;
+    if (l.includes('preprocess') || l.includes('gate'))
+      return <GitBranch className="text-violet-400" size={24} />;
+    if (l.includes('qa') || l.includes('critic'))
+      return <ShieldAlert className="text-emerald-400" size={24} />;
+    if (l.includes('search')) return <Search className="text-blue-400" size={20} />;
+    if (l.includes('file')) return <Database className="text-amber-400" size={20} />;
+    return <Terminal className="text-slate-400" size={20} />;
+  };
+
+  // Dynamic Styles based on Role and Status
+  const getStyles = () => {
+    if (label.toLowerCase().includes('supervisor')) {
+      return {
+        wrapper: 'border-cyan-500/50 bg-slate-900/90 shadow-[0_0_30px_-5px_rgba(6,182,212,0.3)]',
+        header: 'text-cyan-100',
+        glow: 'shadow-[0_0_20px_rgba(6,182,212,0.6)]',
+      };
+    }
+    if (isFailed) {
+      return {
+        wrapper: 'border-red-500/60 bg-red-950/40 shadow-[0_0_20px_-5px_rgba(239,68,68,0.4)]',
+        header: 'text-red-100',
+        glow: 'shadow-[0_0_20px_rgba(239,68,68,0.6)]',
+      };
+    }
+    return {
+      wrapper: 'border-slate-700 bg-slate-950/80 hover:border-slate-500',
+      header: 'text-slate-200',
+      glow: 'shadow-[0_0_15px_rgba(255,255,255,0.2)]',
+    };
+  };
+
+  const styles = getStyles();
 
   return (
     <div
-      className={clsx(
-        'relative flex min-w-[200px] items-center rounded-xl border-2 p-3 backdrop-blur-md transition-all duration-300',
-        data.isSelected
-          ? 'border-purple-500 bg-purple-500/20 shadow-[0_0_25px_-5px_rgb(168,85,247)]'
-          : data.isInPath
-            ? 'border-purple-400/50 bg-purple-900/30 shadow-[0_0_15px_-3px_rgb(168,85,247)]'
-            : isActive
-              ? 'border-primary bg-black/80 shadow-[0_0_20px_-5px_var(--color-primary)]'
-              : 'border-white/10 bg-black/60 hover:border-white/30',
-        isRunning && 'border-secondary animate-pulse shadow-[0_0_15px_-3px_var(--color-secondary)]',
-        isCompleted && !isActive && !data.isInPath && 'border-green-500/30 text-green-100',
-        isFailed && 'border-red-500/50'
+      className={cn(
+        'group relative flex h-24 w-[280px] items-center gap-4 rounded-xl border-2 px-5 py-3 backdrop-blur-xl transition-all duration-300',
+        styles.wrapper,
+        selected ? `border-white/40 ${styles.glow} z-10 scale-105` : '',
+        isRunning ? 'animate-pulse border-cyan-400/80 shadow-[0_0_30px_rgba(6,182,212,0.4)]' : ''
       )}
     >
-      <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-white/20" />
+      {/* Input Handle (Top) */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!h-3 !w-16 !rounded-t-none !rounded-b-lg !border-0 !bg-slate-700 transition-colors group-hover:!bg-slate-500"
+      />
 
+      {/* Icon Area */}
       <div
-        className={clsx(
-          'mr-3 flex h-10 w-10 items-center justify-center rounded-lg shadow-inner',
-          isActive ? 'bg-primary/20 text-primary' : 'text-muted-foreground bg-white/5',
-          isRunning && 'text-secondary bg-secondary/10',
-          isCompleted && !isActive && 'bg-green-500/10 text-green-400'
+        className={cn(
+          'flex h-12 w-12 items-center justify-center rounded-lg border border-white/10 bg-black/20',
+          isRunning && 'animate-spin-slow' // Optional custom spin class
         )}
       >
-        {React.createElement(IconComponent, { size: 20 })}
+        {getIcon()}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="mb-0.5 flex items-center justify-between">
-          <span className="mr-2 truncate text-xs font-bold tracking-wider text-white/90 uppercase">
-            {data.label}
+      {/* Content Area */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span
+            className={cn('truncate text-xs font-bold tracking-widest uppercase', styles.header)}
+          >
+            {label}
           </span>
-          {data.onRerun && !['preprocess', 'supervisor'].some((r: string) => id.includes(r)) && (
-            <div
-              role="button"
-              title="Fork from here"
-              onClick={(e) => {
-                e.stopPropagation();
-                data.onRerun(data.checkpointId, undefined, data.stepName);
-              }}
-              className="bg-primary/20 hover:bg-primary text-primary rounded p-1 transition-colors hover:text-white"
-            >
-              <RotateCcw size={10} />
-            </div>
+          {isLatest && (
+            <div className="h-2 w-2 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_8px_cyan]" />
           )}
         </div>
 
-        <div className="text-muted-foreground flex items-center gap-2 font-mono text-[10px]">
-          {isRunning ? (
-            <span className="text-secondary flex items-center gap-1">
-              <Activity size={8} className="animate-spin" /> Running
-            </span>
-          ) : isCompleted ? (
-            <span className="flex items-center gap-1 text-green-400">
-              <CheckCircle2 size={8} /> Completed
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-red-400">
-              <AlertCircle size={8} /> Failed
-            </span>
-          )}
-          <span className="opacity-50">
-            {new Date(data.timestamp).toLocaleTimeString([], {
+        <div className="flex items-center justify-between">
+          <span
+            className={cn(
+              'rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase',
+              isRunning
+                ? 'bg-cyan-500/20 text-cyan-300'
+                : isCompleted
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : isFailed
+                    ? 'bg-red-500/20 text-red-300'
+                    : 'bg-slate-800 text-slate-400'
+            )}
+          >
+            {status}
+          </span>
+          <span className="font-mono text-[10px] text-slate-500">
+            {new Date(timestamp).toLocaleTimeString([], {
+              hour12: false,
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
-              fractionalSecondDigits: undefined,
             })}
           </span>
         </div>
       </div>
 
+      {/* Output Handle (Bottom) */}
       <Handle
         type="source"
-        position={Position.Right}
-        className="!h-3 !w-3 !border-0 !bg-white/20"
+        position={Position.Bottom}
+        className="!h-3 !w-16 !rounded-t-lg !rounded-b-none !border-0 !bg-slate-700 transition-colors group-hover:!bg-slate-500"
       />
     </div>
   );
 });
-CustomNode.displayName = 'CustomNode';
+CyberNode.displayName = 'CyberNode';
 
-// --- Main Component ---
+// --- 3. Custom Animated Edge ---
+// Uses SmoothStep for clean orthogonal lines, plus SVG animation for active data flow
 
-interface GraphVisualizerProps {
-  visitedNodes: VisitedNode[];
-  activeNodes: string[];
-  onStepClick: (step: { name: string; checkpointId?: string }) => void;
-  onRerun: (checkpointId: string, newInput?: string, stepName?: string) => void;
-  agentMap?: Record<string, string>;
-}
+const AnimatedSmartEdge = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style = {},
+  markerEnd,
+  data,
+}: EdgeProps) => {
+  const [edgePath] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+    borderRadius: 20, // Smooth corners
+  });
 
-const nodeTypes = {
-  custom: CustomNode,
+  const isRunning = data?.active;
+
+  return (
+    <>
+      {/* Background glow path */}
+      <BaseEdge
+        path={edgePath}
+        style={{ strokeWidth: 4, stroke: isRunning ? 'rgba(6,182,212,0.1)' : 'transparent' }}
+      />
+
+      {/* Main Path */}
+      <BaseEdge
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{
+          ...style,
+          strokeWidth: 2,
+          stroke: isRunning ? '#22d3ee' : '#475569', // Cyan if running, Slate if idle
+          filter: isRunning ? 'drop-shadow(0 0 4px rgba(34,211,238,0.5))' : undefined,
+          transition: 'all 0.5s ease',
+        }}
+      />
+
+      {/* Data Packet Animation */}
+      {isRunning && (
+        <circle r="4" fill="#fff">
+          <animateMotion dur="1.5s" repeatCount="indefinite" path={edgePath} />
+        </circle>
+      )}
+    </>
+  );
 };
 
-const proOptions = { hideAttribution: true };
+const nodeTypes = { cyber: CyberNode };
+const edgeTypes = { smart: AnimatedSmartEdge };
+
+// --- 4. Main Component ---
 
 export function GraphVisualizer({
   visitedNodes,
   activeNodes,
   onStepClick,
   onRerun,
-  agentMap = {},
 }: GraphVisualizerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selectedNodeUid, setSelectedNodeUid] = useState<string | null>(null);
-  const [hoveredNodeUid, setHoveredNodeUid] = useState<string | null>(null);
 
-  // Rerun Dialog State
-  const [rerunDialog, setRerunDialog] = useState<{
-    isOpen: boolean;
-    checkpointId: string;
-    nodeId: string;
-  }>({
-    isOpen: false,
-    checkpointId: '',
-    nodeId: '',
-  });
-  const [rerunInput, setRerunInput] = useState('');
+  // Data Transformation Logic
+  const { layoutedNodes, layoutedEdges } = useMemo(() => {
+    if (!visitedNodes.length) return { layoutedNodes: [], layoutedEdges: [] };
 
-  const handleRerunClick = useCallback((checkpointId: string, _?: string, nodeId?: string) => {
-    setRerunDialog({ isOpen: true, checkpointId, nodeId: nodeId || '' });
-  }, []);
-
-  const confirmRerun = () => {
-    if (rerunDialog.checkpointId) {
-      onRerun(rerunDialog.checkpointId, rerunInput || undefined, rerunDialog.nodeId);
-    }
-    setRerunDialog((prev) => ({ ...prev, isOpen: false }));
-    setRerunInput('');
-  };
-
-  // Helper to trace path from root to a specific node UID
-  const tracePath = useCallback((targetUid: string, visitedNodes: VisitedNode[]): Set<string> => {
-    const pathUids = new Set<string>();
-    const uidToNode = new Map(visitedNodes.map((n) => [n.uid, n]));
-
-    let currentUid: string | undefined = targetUid;
-    while (currentUid) {
-      pathUids.add(currentUid);
-      const node = uidToNode.get(currentUid);
-      if (!node || !node.parentCheckpointId) break;
-
-      // Find parent node(s) with matching checkpoint
-      const parentNode = visitedNodes.find((n) => n.checkpoint_id === node.parentCheckpointId);
-      currentUid = parentNode?.uid;
-    }
-    return pathUids;
-  }, []);
-
-  // Transform VisitedNodes to ReactFlow Elements
-  // Memoize calculation to avoid re-layouting on every render unless nodes change
-  const buildGraph = useCallback(() => {
-    if (visitedNodes.length === 0) return { nodes: [], edges: [] };
-
-    const newNodes: Node[] = [];
-    const newEdges: Edge[] = [];
+    // 1. Convert VisitedNodes to ReactFlow Nodes
+    // We group by ID to avoid duplicates, keeping the *latest* status
     const nodeMap = new Map<string, Node>();
 
-    // Calculate path for either selected or hovered node (click takes precedence)
-    const activeNodeUid = selectedNodeUid || hoveredNodeUid;
-    const highlightedPath = activeNodeUid
-      ? tracePath(activeNodeUid, visitedNodes)
-      : new Set<string>();
-
-    // 1. Create Nodes
     visitedNodes.forEach((vNode) => {
-      const displayName = agentMap[vNode.id] || vNode.label || vNode.id;
-      const isInPath = highlightedPath.has(vNode.uid);
-      const isSelected = vNode.uid === selectedNodeUid;
-      const isHovered = vNode.uid === hoveredNodeUid;
+      // Determine if this is the currently active node in the real-time execution
+      const isActive = activeNodes.includes(vNode.id);
 
       const node: Node = {
-        id: vNode.uid, // Use UID for uniqueness
-        type: 'custom',
-        position: { x: 0, y: 0 }, // Handled by layout
+        id: vNode.id,
+        type: 'cyber',
         data: {
-          label: displayName,
+          label: vNode.label || vNode.id,
           status: vNode.status,
           timestamp: vNode.timestamp,
-          stepName: vNode.id,
-          active: activeNodes.includes(vNode.id) && vNode.status === 'running', // Only highlight if actually running
+          isLatest: isActive,
           checkpointId: vNode.checkpoint_id,
-          onRerun: handleRerunClick,
-          isInPath,
-          isSelected,
-          isHovered,
         },
+        position: { x: 0, y: 0 }, // Initial, will be overridden by Dagre
       };
-      newNodes.push(node);
-      nodeMap.set(vNode.uid, node);
+      nodeMap.set(vNode.id, node);
     });
 
-    // 2. Create Edges
-    // Map checkpoint_id -> uid[]
-    // Because parallel nodes share the same checkpoint_id, we must map 1 checkpoint -> N UIDs
-    const checkpointToUids = new Map<string, string[]>();
+    const rawNodes = Array.from(nodeMap.values());
+
+    // 2. Build Edges based on Checkpoint Parentage
+    const rawEdges: Edge[] = [];
+    const nodeIds = new Set(nodeMap.keys());
+    const edgeFingerprints = new Set<string>();
+
+    // Helper to map checkpoint -> nodeId
+    const checkpointToNode = new Map<string, string>();
     visitedNodes.forEach((n) => {
-      if (n.checkpoint_id) {
-        const existing = checkpointToUids.get(n.checkpoint_id) || [];
-        existing.push(n.uid);
-        checkpointToUids.set(n.checkpoint_id, existing);
-      }
+      if (n.checkpoint_id) checkpointToNode.set(n.checkpoint_id, n.id);
     });
-
-    // Find the latest fork point (most recent node with timestamp)
-    const latestForkTimestamp =
-      visitedNodes.length > 0
-        ? Math.max(...visitedNodes.slice(-5).map((n) => n.timestamp)) // Last 5 nodes to identify recent fork
-        : 0;
-    const forkThreshold = latestForkTimestamp - 5000; // 5 second window for fork detection
 
     visitedNodes.forEach((node) => {
-      // Strategy: Strict Parent Checkpoint Linkage
       if (node.parentCheckpointId) {
-        const parentUids = checkpointToUids.get(node.parentCheckpointId);
+        const parentId = checkpointToNode.get(node.parentCheckpointId);
 
-        // If parent is visible in the graph (could be multiple if parent was parallel)
-        if (parentUids && parentUids.length > 0) {
-          // Lane Heuristic:
-          // If we have parallel parents (Mesh), and one of them has the SAME label/agent as current node,
-          // we prefer connecting to that one (Lane) instead of all of them (Mesh).
-          // This cleans up "A, B -> A, B" loops into "A->A, B->B".
+        // Ensure both nodes exist in our current graph view
+        if (parentId && nodeIds.has(parentId) && parentId !== node.id) {
+          const edgeId = `${parentId}-${node.id}`;
 
-          const currentLabel = nodeMap.get(node.uid)?.data?.label;
-          const sameLabelParents = parentUids.filter((pid) => {
-            const pNode = nodeMap.get(pid);
-            return pNode && pNode.data.label === currentLabel;
-          });
+          if (!edgeFingerprints.has(edgeId)) {
+            edgeFingerprints.add(edgeId);
 
-          const parentsToConnect = sameLabelParents.length > 0 ? sameLabelParents : parentUids;
+            // Check if source or target is active to animate the edge
+            const isFlowActive = activeNodes.includes(node.id) && node.status === 'running';
 
-          parentsToConnect.forEach((parentUid) => {
-            if (nodeMap.has(parentUid)) {
-              // Determine if this edge is part of the latest fork
-              const isLatestFork = node.timestamp > forkThreshold;
-
-              // Check if this edge is part of the highlighted path
-              const isInPath = highlightedPath.has(parentUid) && highlightedPath.has(node.uid);
-
-              newEdges.push({
-                id: `e-${parentUid}-${node.uid}`,
-                source: parentUid,
-                target: node.uid,
-                animated: isLatestFork || isInPath, // Animate latest fork or path edges
-                style: {
-                  stroke: isInPath ? '#a855f7' : isLatestFork ? '#22d3ee' : '#ffffff30', // Purple for path, cyan for fork, white for others
-                  strokeWidth: isInPath ? 3 : isLatestFork ? 2.5 : 2,
-                },
-                type: 'default',
-              });
-            }
-          });
+            rawEdges.push({
+              id: edgeId,
+              source: parentId,
+              target: node.id,
+              type: 'smart',
+              animated: false, // We use custom SVG animation inside the component
+              data: { active: isFlowActive },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: isFlowActive ? '#22d3ee' : '#475569',
+              },
+            });
+          }
         }
       }
     });
 
-    return getLayoutedElements(newNodes, newEdges);
-  }, [
-    visitedNodes,
-    activeNodes,
-    agentMap,
-    handleRerunClick,
-    selectedNodeUid,
-    hoveredNodeUid,
-    tracePath,
-  ]);
+    // 3. Apply Dagre Layout
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(rawNodes, rawEdges);
+    return { layoutedNodes, layoutedEdges };
+  }, [visitedNodes, activeNodes]);
 
+  // Sync state when data changes
   useEffect(() => {
-    const { nodes: layoutedNodes, edges: layoutedEdges } = buildGraph();
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
-  }, [buildGraph, setNodes, setEdges]);
-
-  // Auto-Focus active node?
-  // Maybe later.
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges]);
 
   return (
-    <div className="h-full min-h-[400px] w-full">
+    <div className="relative h-[85vh] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#020617] shadow-2xl">
+      {/* Ambient Background Grid */}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:40px_40px] opacity-20" />
+
+      {/* Radial Gradient overlay for depth */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.05)_0%,transparent_70%)]" />
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={(_, node) => {
-          // Toggle selection: if clicking same node, deselect; otherwise select
-          setSelectedNodeUid((prev) => (prev === node.id ? null : node.id));
           onStepClick({
-            name: node.data.stepName,
+            name: node.id,
             checkpointId: node.data.checkpointId,
           });
         }}
-        onNodeMouseEnter={(_, node) => {
-          // Only show hover path if nothing is selected (click takes precedence)
-          if (!selectedNodeUid) {
-            setHoveredNodeUid(node.id);
-          }
-        }}
-        onNodeMouseLeave={() => {
-          setHoveredNodeUid(null);
-        }}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.5}
-        maxZoom={1.5}
-        attributionPosition="bottom-right"
-        proOptions={proOptions}
+        fitViewOptions={{ padding: 0.2, minZoom: 0.1, maxZoom: 1.5 }}
+        minZoom={0.2}
+        maxZoom={2}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        proOptions={{ hideAttribution: true }}
       >
-        <Background color="#ffffff" gap={20} size={1} style={{ opacity: 0.05 }} />
+        <Background color="#1e293b" gap={20} size={1} />
         <Controls
-          className="overflow-hidden rounded-lg border border-white/10 bg-black/50 [&>button]:!border-none [&>button]:!bg-transparent [&>button]:!text-white [&>button:hover]:!bg-white/10"
           showInteractive={false}
+          style={{
+            backgroundColor: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+          }}
         />
       </ReactFlow>
 
-      <Dialog
-        open={rerunDialog.isOpen}
-        onOpenChange={(o) => setRerunDialog((prev) => ({ ...prev, isOpen: o }))}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Fork Conversation</DialogTitle>
-            <DialogDescription>
-              Rerun the conversation from this step. This will create a new branch in the timeline.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label>New Input (Optional)</Label>
-            <Input
-              value={rerunInput}
-              onChange={(e) => setRerunInput(e.target.value)}
-              placeholder="Modify the instructions for this step..."
-              className="mt-2"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRerunDialog((prev) => ({ ...prev, isOpen: false }))}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmRerun}>Confirm Fork</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Header Overlay */}
+      <div className="absolute top-4 left-4 z-10 flex flex-col">
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white">
+          <ActivityIcon />
+          Agent Neural Graph
+        </h2>
+        <div className="mt-1 font-mono text-xs text-slate-500">
+          LIVE EXECUTION TRACE // AUTOMATED LAYOUT
+        </div>
+      </div>
     </div>
   );
 }
+
+// Simple Icon Component for the header
+const ActivityIcon = () => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="text-cyan-500"
+  >
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </svg>
+);

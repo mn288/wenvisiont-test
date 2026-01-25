@@ -1,13 +1,22 @@
 import asyncio
 
 import pytest
+from fastmcp import FastMCP
 
 from tools.adapter import MCPAdapter
-from tools.server import mcp
 
 
 @pytest.mark.asyncio
 async def test_integration():
+    # 1. Setup Local Mock MCP Server
+    print("Initializing Local Mock MCP Server...")
+    mcp = FastMCP("test-server")
+
+    @mcp.tool()
+    async def search_web(query: str) -> str:
+        """Mock search for testing integration."""
+        return f"Mock search result for: {query}"
+
     print("Initializing Adapter...")
     adapter = MCPAdapter([mcp])
 
@@ -23,19 +32,23 @@ async def test_integration():
         print("\nTesting 'search_web' tool...")
         # Test async invocation
         try:
-            result = await search_tool.ainvoke({"query": "FastMCP Integration"})
+            # CrewAI BaseTool uses arun for async
+            result = await search_tool.arun(query="FastMCP Integration")
             print(f"Result (async): {result}")
+            assert "Mock search result" in str(result)
         except Exception as e:
-            print(f"Error invoking tool async: {e}")
+            pytest.fail(f"Error invoking tool async: {e}")
 
         # Test sync invocation (should also work via wrapper)
         try:
-            result_sync = search_tool.invoke({"query": "FastMCP Integration Sync"})
+            # CrewAI BaseTool uses run for sync
+            result_sync = search_tool.run(query="FastMCP Integration Sync")
             print(f"Result (sync): {result_sync}")
+            assert "Mock search result" in str(result_sync)
         except Exception as e:
-            print(f"Error invoking tool sync: {e}")
+            pytest.fail(f"Error invoking tool sync: {e}")
     else:
-        print("search_web tool not found!")
+        pytest.fail("search_web tool not found!")
 
 
 if __name__ == "__main__":

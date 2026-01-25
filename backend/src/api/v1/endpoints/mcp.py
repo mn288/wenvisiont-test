@@ -1,50 +1,46 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from api.dependencies import require_role
-from core.database import pool
+from api.dependencies import get_session, require_role
+from brain.registry import AgentRegistry
 from models.mcp import MCPServer, MCPServerCreate
+from services.graph_service import GraphService
+from services.mcp import mcp_service
 
 router = APIRouter()
 
 
+async def background_system_reload(server_name: str, action: str):
+    """
+    Background task to reload the system (Agents + Graph) after a change.
+    """
+    try:
+        print(f"Background Task: Reloading system after {action} of MCP Server '{server_name}'...")
+        await AgentRegistry().load_agents()
+        await GraphService.get_instance().reload_graph()
+        print("Background Task: System reload complete.")
+    except Exception as e:
+        print(f"Background Task Error: Failed to reload system: {e}")
+
+
 @router.get("/", response_model=List[MCPServer], dependencies=[Depends(require_role("ADMIN"))])
-async def list_mcp_servers():
+async def list_mcp_servers(session: AsyncSession = Depends(get_session)):
     """List all MCP servers."""
     try:
-        async with pool.connection() as conn:
-            async with conn.cursor() as cur:
-                # We fetch manually to map to Model (or use simple select if using raw SQLModel session - checking consistent pattern in codebase)
-                # The codebase seems to use raw asyncpg cursors often with helper text queries?
-                # Let's check `stats.py` -> yes, raw SQL.
-                # Let's check `registry.py` -> yes, raw SQL.
-                # So we stick to raw SQL for consistency.
-
-                await cur.execute("SELECT id, name, type, command, args, url, env FROM mcp_servers ORDER BY name")
-                rows = await cur.fetchall()
-
-                servers = []
-                for row in rows:
-                    servers.append(
-                        MCPServer(
-                            id=row[0],
-                            name=row[1],
-                            type=row[2],
-                            command=row[3],
-                            args=row[4] if row[4] else [],
-                            url=row[5],
-                            env=row[6] if row[6] else {},
-                        )
-                    )
-                return servers
+        return await mcp_service.get_all_servers(session=session)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list MCP servers: {str(e)}")
 
 
 @router.post("/", response_model=MCPServer, dependencies=[Depends(require_role("ADMIN"))])
-async def create_mcp_server(server: MCPServerCreate):
-    """Add a new MCP server."""
+async def create_mcp_server(
+    server: MCPServerCreate, 
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session)
+):
+    """Add a new MCP server. Reloads system in background."""
     # Basic Validation
     if server.type == "stdio" and not server.command:
         raise HTTPException(status_code=400, detail="Command is required for stdio type")
@@ -52,62 +48,50 @@ async def create_mcp_server(server: MCPServerCreate):
         raise HTTPException(status_code=400, detail="URL is required for sse/https type")
 
     try:
-        async with pool.connection() as conn:
-            async with conn.cursor() as cur:
-                # Check duplication
-                await cur.execute("SELECT 1 FROM mcp_servers WHERE name = %s", (server.name,))
-                if await cur.fetchone():
-                    raise HTTPException(status_code=409, detail=f"MCP Server '{server.name}' already exists")
-
-                import json
-
-                await cur.execute(
-                    """
-                    INSERT INTO mcp_servers (name, type, command, args, url, env, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    RETURNING id
-                    """,
-                    (
-                        server.name,
-                        server.type,
-                        server.command,
-                        server.args,
-                        server.url,
-                        json.dumps(server.env) if server.env else None,
-                    ),
-                )
-                new_id = await cur.fetchone()
-                await conn.commit()
-
-                # Return created object
-                return MCPServer(
-                    id=new_id[0],
-                    name=server.name,
-                    type=server.type,
-                    command=server.command,
-                    args=server.args,
-                    url=server.url,
-                    env=server.env,
-                )
-
-    except HTTPException:
-        raise
+        new_server = await mcp_service.create_server(server, session=session)
+        
+        # Trigger Reload in Background
+        background_tasks.add_task(background_system_reload, new_server.name, "creation")
+        
+        return new_server
+    except ValueError as e:
+        # Check for duplication (handled in service now, but message matching helps)
+        if "already exists" in str(e):
+            raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=f"Connection Failed: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create MCP server: {str(e)}")
 
 
 @router.delete("/{name}", dependencies=[Depends(require_role("ADMIN"))])
-async def delete_mcp_server(name: str):
-    """Delete an MCP server."""
+async def delete_mcp_server(
+    name: str, 
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session)
+):
+    """Delete an MCP server. Reloads system in background."""
     try:
-        async with pool.connection() as conn:
-            async with conn.cursor() as cur:
-                result = await cur.execute("DELETE FROM mcp_servers WHERE name = %s", (name,))
-                if result.rowcount == 0:
-                    raise HTTPException(status_code=404, detail="MCP Server not found")
-                await conn.commit()
-                return {"message": f"MCP Server {name} deleted"}
+        deleted = await mcp_service.delete_server(name, session=session)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="MCP Server not found")
+        
+        # Trigger Reload in Background
+        background_tasks.add_task(background_system_reload, name, "deletion")
+
+        return {"message": f"MCP Server {name} deleted. System reload scheduled."}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete MCP server: {str(e)}")
+
+
+@router.post("/reload", dependencies=[Depends(require_role("ADMIN"))])
+async def reload_system(background_tasks: BackgroundTasks):
+    """Manually trigger a system reload (Background Task)."""
+    try:
+        background_tasks.add_task(background_system_reload, "Manual", "request")
+        return {"status": "accepted", "message": "System reload scheduled in background."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")

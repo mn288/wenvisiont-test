@@ -1,6 +1,16 @@
+from typing import AsyncGenerator
+
 from fastapi import Header, HTTPException
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.middleware import get_current_role
+from core.database import async_session_maker
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Dependency to provide a database session."""
+    async with async_session_maker() as session:
+        yield session
 
 
 def require_role(required_role: str):

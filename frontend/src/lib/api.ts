@@ -9,6 +9,7 @@ export interface StepLog {
   parent_checkpoint_id?: string | null;
 }
 
+export const API_BASE_URL = 'http://localhost:8000';
 export const TENANT_ID = 'bank-a'; // Default tenant for development
 
 export interface ForkResponse {
@@ -104,7 +105,7 @@ export async function deleteConversation(threadId: string): Promise<void> {
 export interface LogEntry {
   id: string;
   timestamp: Date;
-  type: 'system' | 'node-start' | 'node-end' | 'error' | 'info' | 'thought' | 'tool';
+  type: 'system' | 'node-start' | 'node-end' | 'error' | 'info' | 'thought' | 'tool' | 'output';
   message: string;
   node?: string; // Optional context about which node generated this
   input?: unknown;
@@ -143,6 +144,22 @@ export async function listAgents(): Promise<AgentConfig[]> {
     headers: { 'X-Tenant-ID': TENANT_ID },
   });
   if (!res.ok) throw new Error('Failed to list agents');
+  return res.json();
+}
+
+export interface AgentSummary {
+  id: string;
+  label: string;
+  role: string;
+  description: string;
+  importance_score: number;
+  success_rate: number;
+  task_domains: string[];
+}
+
+export async function listAgentsSummary(): Promise<AgentSummary[]> {
+  const res = await fetch('http://localhost:8000/agents/summary');
+  if (!res.ok) throw new Error('Failed to get agents summary');
   return res.json();
 }
 

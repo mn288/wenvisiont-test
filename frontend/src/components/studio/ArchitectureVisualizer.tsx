@@ -12,16 +12,16 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { GraphConfig } from '@/lib/api';
-import { User, Bot, Network, BrainCircuit, Layers } from 'lucide-react';
+import { User, Bot, Network, BrainCircuit, Layers, AlertCircle } from 'lucide-react';
 
-const nodeWidth = 180;
-const nodeHeight = 60;
+const nodeWidth = 250;
+const nodeHeight = 80;
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  dagreGraph.setGraph({ rankdir: 'LR' });
+  dagreGraph.setGraph({ rankdir: 'LR', ranksep: 100, nodesep: 50 });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
@@ -58,7 +58,21 @@ const CustomNode = ({ data }: { data: { label: string; type: string } }) => {
   let colorClass = 'text-blue-400 bg-blue-500/20';
   let borderClass = 'border-blue-500/30';
 
-  if (type.includes('supervisor') || label.includes('supervisor') || label.includes('manager')) {
+  // Use local variable for display to avoid mutating props
+  let displayLabel = data.label;
+
+  // Defensive: Handle undefined or invalid types
+  if (!type || type === 'undefined' || !label || label === 'undefined') {
+    Icon = AlertCircle;
+    colorClass = 'text-red-400 bg-red-500/20';
+    borderClass = 'border-red-500/50';
+    // Override label for clarity
+    if (label === 'undefined') displayLabel = 'Unknown Node';
+  } else if (
+    type.includes('supervisor') ||
+    label.includes('supervisor') ||
+    label.includes('manager')
+  ) {
     Icon = BrainCircuit;
     colorClass = 'text-purple-400 bg-purple-500/20';
     borderClass = 'border-purple-500/50';
@@ -88,7 +102,7 @@ const CustomNode = ({ data }: { data: { label: string; type: string } }) => {
         <div className="text-[10px] font-bold tracking-wider text-white/50 uppercase">
           {data.type}
         </div>
-        <div className="text-sm font-bold text-white">{data.label}</div>
+        <div className="text-sm font-bold text-white">{displayLabel}</div>
       </div>
       <Handle type="source" position={Position.Right} className="!bg-white/50" />
     </div>

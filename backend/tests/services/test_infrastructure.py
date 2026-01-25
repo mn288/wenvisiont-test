@@ -35,11 +35,12 @@ def test_get_or_create_infrastructure_local(mock_fs):
     service = InfrastructureService()
 
     # Mock exists=False to trigger makedirs
+    # Mock exists=False to trigger makedirs
     MockOS.path.exists.return_value = False
 
     infra = service.get_or_create_infrastructure("t1")
 
-    expect(infra.local_workspace_path).to(contain("/tmp/wenvision/workspace/t1"))
+    expect(infra.local_workspace_path).to(contain("/tmp/test_workspace/t1"))
     expect(MockOS.makedirs.called).to(be_true)
     expect(infra.s3_config).to(be(None))
 

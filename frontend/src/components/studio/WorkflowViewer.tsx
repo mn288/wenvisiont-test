@@ -15,7 +15,7 @@ interface WorkflowViewerProps {
 export function WorkflowViewer({ config, isOpen, onClose, onDelete }: WorkflowViewerProps) {
   const [editingAgentName, setEditingAgentName] = useState<string | null>(null);
 
-  const handleNodeClick = (nodeId: string, nodeType: string, nodeLabel: string) => {
+  const handleNodeClick = (nodeId: string, nodeType: string) => {
     // Only allow editing for certain types (exclude supervisor if generated purely by code, but here types are agent names)
     // We assume any nodeType that is NOT 'supervisor' might be an agent.
     // However, if the type is literally 'supervisor', it might not be a CRUD-able agent in the registry (it's hardcoded logic).
@@ -24,6 +24,11 @@ export function WorkflowViewer({ config, isOpen, onClose, onDelete }: WorkflowVi
       // Internal supervisor usually doesn't have a config page yet.
       // If the user wants to config the supervisor, we might need a separate SupervisorEditor.
       // For now, ignore.
+      return;
+    }
+
+    // Defensive: Ignore undefined/broken nodes
+    if (!nodeType || nodeType === 'undefined' || nodeType === 'custom') {
       return;
     }
 
@@ -38,7 +43,7 @@ export function WorkflowViewer({ config, isOpen, onClose, onDelete }: WorkflowVi
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden border border-white/10 bg-[#0c0c0c] p-0 text-white">
+        <DialogContent className="flex h-[85vh] max-w-4xl flex-col overflow-hidden border border-white/10 bg-[#0c0c0c] p-0 text-white">
           <DialogHeader className="border-b border-white/10 px-6 py-4">
             <DialogTitle className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
@@ -54,11 +59,11 @@ export function WorkflowViewer({ config, isOpen, onClose, onDelete }: WorkflowVi
             </DialogTitle>
           </DialogHeader>
 
-          <div className="h-[600px] w-full bg-[#151515] p-4">
+          <div className="w-full flex-1 bg-[#151515] p-4">
             <ArchitectureVisualizer config={config} onNodeClick={handleNodeClick} />
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-white/10 bg-white/5 px-6 py-4">
+          <div className="flex flex-none justify-end gap-2 border-t border-white/10 bg-white/5 px-6 py-4">
             <Button variant="ghost" onClick={onClose}>
               Close
             </Button>

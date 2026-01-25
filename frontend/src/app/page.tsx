@@ -201,18 +201,15 @@ export default function Home() {
       try {
         const logs = await fetchStepHistory(state.threadId);
         if (isMounted) {
-          let filteredLogs = logs.filter((log) => {
+          const filteredLogs = logs.filter((log) => {
             if (!selectedStep) return false;
-            const nameMatch = log.step_name === selectedStep.name;
-            const checkpointMatch = selectedStep.checkpointId
-              ? log.checkpoint_id === selectedStep.checkpointId
-              : !log.checkpoint_id;
-            return nameMatch && checkpointMatch;
+            return log.step_name === selectedStep.name;
           });
 
-          if (filteredLogs.length === 0 && selectedStep.checkpointId) {
-            filteredLogs = logs.filter((log) => log.step_name === selectedStep.name);
-          }
+          // Sort by timestamp to be sure (though usually already sorted)
+          filteredLogs.sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
 
           setStepLogs(filteredLogs);
         }
@@ -240,47 +237,32 @@ export default function Home() {
       isMobileMenuOpen={isSidebarOpen}
       onMobileMenuClose={() => setIsSidebarOpen(false)}
       sidebar={
-        <div className="flex h-full flex-col gap-1.5">
-          {/* History Section */}
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <HistorySidebar
-              currentThreadId={state.threadId}
-              onSelectConversation={handleHistorySelect}
-              onNewChat={() => {
-                actions.handleReset();
-                actions.setInput('');
-                setIsSidebarOpen(false);
-              }}
-              className="border-none bg-transparent"
-            />
-          </div>
-
-          {/* File Explorer Section */}
-          <div className="flex h-[40%] min-h-[200px] shrink-0 flex-col pt-2">
-            <div className="mb-2 flex items-center justify-between px-4">
-              <div className="text-muted-foreground flex items-center gap-2 text-[11px] font-bold tracking-wider uppercase opacity-70">
-                <FileCode size={12} />
-                <span>Workspace Items</span>
-              </div>
-              <div className="ml-3 h-px flex-1 bg-white/5" />
-            </div>
-
-            <div className="min-h-0 flex-1 px-2">
-              {state.threadId ? (
-                <FileExplorer initialPath={state.threadId} />
-              ) : (
-                <div className="text-muted-foreground flex h-full items-center justify-center text-xs opacity-50">
-                  Select a thread...
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="flex h-full min-h-0 flex-col gap-1.5">
+          <HistorySidebar
+            currentThreadId={state.threadId}
+            onSelectConversation={handleHistorySelect}
+            onNewChat={() => {
+              actions.handleReset();
+              actions.setInput('');
+              setIsSidebarOpen(false);
+            }}
+            className="border-none bg-transparent"
+          />
         </div>
+      }
+      fileExplorer={
+        state.threadId ? (
+          <FileExplorer initialPath={state.threadId} />
+        ) : (
+          <div className="text-muted-foreground flex h-full items-center justify-center text-xs opacity-50">
+            Select a thread...
+          </div>
+        )
       }
     >
       <div className="relative h-full w-full">
         {/* === LAYER 0: GRAPH BACKGROUND (Spatial Canvas) === */}
-        <div className="fixed inset-0 z-0">
+        <div className="absolute inset-0 z-0">
           <GraphVisualizer
             activeNodes={state.activeNodes}
             visitedNodes={state.visitedNodes}
@@ -316,7 +298,7 @@ export default function Home() {
           }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           className={cn(
-            'fixed top-4 bottom-32 z-20 flex flex-col',
+            'fixed top-20 right-4 bottom-32 z-20 flex flex-col',
             'rounded-2xl border border-white/10 bg-black/60 shadow-2xl backdrop-blur-xl',
             'overflow-hidden'
           )}

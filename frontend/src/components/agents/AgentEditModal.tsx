@@ -154,7 +154,7 @@ export function AgentEditModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto border border-white/10 bg-[#0c0c0c] text-white">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden border border-white/10 bg-[#0c0c0c] text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{agent ? `Edit Agent: ${agent.name}` : 'Loading...'}</span>
@@ -179,185 +179,187 @@ export function AgentEditModal({
           </DialogTitle>
         </DialogHeader>
 
-        {loading && (
-          <div className="flex justify-center p-8">
-            <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-white"></div>
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading && (
+            <div className="flex justify-center p-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-white"></div>
+            </div>
+          )}
 
-        {agent && !loading && (
-          <div className="space-y-4 py-4">
-            {isYamlMode ? (
-              <div className="space-y-2">
-                <Textarea
-                  value={yamlContent}
-                  onChange={(e) => setYamlContent(e.target.value)}
-                  className="h-[500px] border-white/10 bg-[#111] font-mono text-xs leading-relaxed text-blue-100/90"
-                  spellCheck={false}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Display Name</Label>
-                    <Input
-                      value={agent.display_name}
-                      onChange={(e) => setAgent({ ...agent, display_name: e.target.value })}
-                      className="border-white/10 bg-white/5"
-                    />
-                  </div>
-                  <div>
-                    <Label>Role</Label>
-                    <Input
-                      value={agent.agent.role}
-                      onChange={(e) => updateAgentField('role', e.target.value)}
-                      className="border-white/10 bg-white/5"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Description</Label>
-                  <Textarea
-                    value={agent.description}
-                    onChange={(e) => setAgent({ ...agent, description: e.target.value })}
-                    className="h-20 border-white/10 bg-white/5"
-                  />
-                </div>
-
+          {agent && !loading && (
+            <div className="space-y-4">
+              {isYamlMode ? (
                 <div className="space-y-2">
-                  <Label className="text-primary font-bold">Goal</Label>
                   <Textarea
-                    value={agent.agent.goal}
-                    onChange={(e) => updateAgentField('goal', e.target.value)}
-                    className="h-24 border-white/10 bg-white/5"
+                    value={yamlContent}
+                    onChange={(e) => setYamlContent(e.target.value)}
+                    className="h-[500px] border-white/10 bg-[#111] font-mono text-xs leading-relaxed text-blue-100/90"
+                    spellCheck={false}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-primary font-bold">Backstory</Label>
-                  <Textarea
-                    value={agent.agent.backstory}
-                    onChange={(e) => updateAgentField('backstory', e.target.value)}
-                    className="h-32 border-white/10 bg-white/5"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold text-blue-400">Task Description</Label>
-                  <p className="text-muted-foreground text-xs">Use {'{request}'} placeholder.</p>
-                  <Textarea
-                    value={agent.task.description}
-                    onChange={(e) => updateTaskField('description', e.target.value)}
-                    className="h-32 border-white/10 bg-white/5"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold text-blue-400">Expected Output</Label>
-                  <Textarea
-                    value={agent.task.expected_output}
-                    onChange={(e) => updateTaskField('expected_output', e.target.value)}
-                    className="h-20 border-white/10 bg-white/5"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-3">
-                    <Label>Files Access</Label>
-                    <Switch
-                      checked={agent.agent.files_access}
-                      onCheckedChange={(c) => updateAgentField('files_access', c)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-3">
-                    <Label>S3 Access</Label>
-                    <Switch
-                      checked={agent.agent.s3_access}
-                      onCheckedChange={(c) => updateAgentField('s3_access', c)}
-                    />
-                  </div>
-                </div>
-
-                {/* DyLAN / MoA Configuration */}
-                <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="flex items-center gap-2 font-bold text-purple-400">
-                    <Network size={16} /> DyLAN & MoA Configuration
-                  </h3>
-
+              ) : (
+                <>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Importance Score (0.0 - 1.0)</Label>
+                      <Label>Display Name</Label>
                       <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="1"
-                        value={agent.agent.importance_score}
-                        onChange={(e) =>
-                          updateAgentField('importance_score', parseFloat(e.target.value))
-                        }
+                        value={agent.display_name}
+                        onChange={(e) => setAgent({ ...agent, display_name: e.target.value })}
                         className="border-white/10 bg-white/5"
                       />
                     </div>
                     <div>
-                      <Label>Success Rate (History)</Label>
+                      <Label>Role</Label>
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="1"
-                        value={agent.agent.success_rate}
-                        onChange={(e) =>
-                          updateAgentField('success_rate', parseFloat(e.target.value))
-                        }
+                        value={agent.agent.role}
+                        onChange={(e) => updateAgentField('role', e.target.value)}
                         className="border-white/10 bg-white/5"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <Label>Task Domains (comma separated)</Label>
-                    <Input
-                      value={agent.agent.task_domains?.join(', ') || ''}
-                      onChange={(e) =>
-                        updateAgentField(
-                          'task_domains',
-                          e.target.value.split(',').map((s) => s.trim())
-                        )
-                      }
-                      placeholder="e.g. coding, research, finance"
-                      className="border-white/10 bg-white/5"
+                    <Label>Description</Label>
+                    <Textarea
+                      value={agent.description}
+                      onChange={(e) => setAgent({ ...agent, description: e.target.value })}
+                      className="h-20 border-white/10 bg-white/5"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Enable Reflection (Self-Correction)</Label>
-                      <p className="text-muted-foreground text-xs">
-                        Agent will critique its own output before finishing.
-                      </p>
+                  <div className="space-y-2">
+                    <Label className="text-primary font-bold">Goal</Label>
+                    <Textarea
+                      value={agent.agent.goal}
+                      onChange={(e) => updateAgentField('goal', e.target.value)}
+                      className="h-24 border-white/10 bg-white/5"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-primary font-bold">Backstory</Label>
+                    <Textarea
+                      value={agent.agent.backstory}
+                      onChange={(e) => updateAgentField('backstory', e.target.value)}
+                      className="h-32 border-white/10 bg-white/5"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="font-bold text-blue-400">Task Description</Label>
+                    <p className="text-muted-foreground text-xs">Use {'{request}'} placeholder.</p>
+                    <Textarea
+                      value={agent.task.description}
+                      onChange={(e) => updateTaskField('description', e.target.value)}
+                      className="h-32 border-white/10 bg-white/5"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="font-bold text-blue-400">Expected Output</Label>
+                    <Textarea
+                      value={agent.task.expected_output}
+                      onChange={(e) => updateTaskField('expected_output', e.target.value)}
+                      className="h-20 border-white/10 bg-white/5"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-3">
+                      <Label>Files Access</Label>
+                      <Switch
+                        checked={agent.agent.files_access}
+                        onCheckedChange={(c) => updateAgentField('files_access', c)}
+                      />
                     </div>
-                    <Switch
-                      checked={agent.agent.use_reflection}
-                      onCheckedChange={(c) => updateAgentField('use_reflection', c)}
-                    />
+                    <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-3">
+                      <Label>S3 Access</Label>
+                      <Switch
+                        checked={agent.agent.s3_access}
+                        onCheckedChange={(c) => updateAgentField('s3_access', c)}
+                      />
+                    </div>
                   </div>
+
+                  {/* DyLAN / MoA Configuration */}
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <h3 className="flex items-center gap-2 font-bold text-purple-400">
+                      <Network size={16} /> DyLAN & MoA Configuration
+                    </h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Importance Score (0.0 - 1.0)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="1"
+                          value={agent.agent.importance_score}
+                          onChange={(e) =>
+                            updateAgentField('importance_score', parseFloat(e.target.value))
+                          }
+                          className="border-white/10 bg-white/5"
+                        />
+                      </div>
+                      <div>
+                        <Label>Success Rate (History)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="1"
+                          value={agent.agent.success_rate}
+                          onChange={(e) =>
+                            updateAgentField('success_rate', parseFloat(e.target.value))
+                          }
+                          className="border-white/10 bg-white/5"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Task Domains (comma separated)</Label>
+                      <Input
+                        value={agent.agent.task_domains?.join(', ') || ''}
+                        onChange={(e) =>
+                          updateAgentField(
+                            'task_domains',
+                            e.target.value.split(',').map((s) => s.trim())
+                          )
+                        }
+                        placeholder="e.g. coding, research, finance"
+                        className="border-white/10 bg-white/5"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Enable Reflection (Self-Correction)</Label>
+                        <p className="text-muted-foreground text-xs">
+                          Agent will critique its own output before finishing.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={agent.agent.use_reflection}
+                        onCheckedChange={(c) => updateAgentField('use_reflection', c)}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {error && (
+                <div className="flex items-center gap-2 rounded border border-red-500/20 bg-red-500/10 p-3 text-red-400">
+                  <AlertCircle size={16} />
+                  {error}
                 </div>
-              </>
-            )}
+              )}
+            </div>
+          )}
+        </div>
 
-            {error && (
-              <div className="flex items-center gap-2 rounded border border-red-500/20 bg-red-500/10 p-3 text-red-400">
-                <AlertCircle size={16} />
-                {error}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex justify-between gap-2">
+        <div className="flex flex-none justify-between gap-2 border-t border-white/10 bg-white/5 p-4">
           <div>
             {onDelete && agent && (
               <Button

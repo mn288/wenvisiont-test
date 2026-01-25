@@ -1,4 +1,4 @@
-import json
+import orjson
 
 from core.database import pool
 
@@ -30,7 +30,7 @@ async def seed_infrastructure():
                         INSERT INTO configurations (key, value, updated_at) 
                         VALUES (%s, %s, CURRENT_TIMESTAMP)
                         """,
-                        ("infrastructure_config", json.dumps(default_config))
+                        ("infrastructure_config", orjson.dumps(default_config).decode())
                     )
                     print("SEEDER: infrastructure_config seeded successfully.")
                 else:

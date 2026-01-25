@@ -49,8 +49,11 @@ async def lifespan(app: FastAPI):
     from core.seeding import seed_infrastructure
     await seed_infrastructure()
 
+    # Seed Default MCP Servers (Filesystem, etc.)
+    from brain.seeder import seed_agents, seed_mcp_servers
+    await seed_mcp_servers()
+
     # Seed Agents from Config (Dynamic Loading)
-    from brain.seeder import seed_agents
     await seed_agents()
 
     # Load Agents from DB

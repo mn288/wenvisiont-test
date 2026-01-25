@@ -52,7 +52,7 @@ export function StepDetailsPanel({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 bottom-0 z-50 flex w-full flex-col border-l border-white/10 bg-[#0f1117] shadow-2xl md:max-w-md"
+            className="fixed top-16 right-0 bottom-0 z-50 flex w-full flex-col border-l border-white/10 bg-[#0f1117] shadow-2xl md:max-w-md"
           >
             {/* Header */}
             <div className="flex items-center gap-4 border-b border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">

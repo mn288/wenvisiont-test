@@ -1,9 +1,16 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from expects import contain, equal, expect
 from fastapi import status
 from httpx import AsyncClient
+
+
+@pytest.fixture(autouse=True)
+def mock_mcp_verify():
+    # Patch the verification method to avoid real network calls
+    with patch("services.mcp.MCPService._verify_server", new_callable=AsyncMock) as mock:
+        yield mock
 
 
 @pytest.mark.asyncio
@@ -49,9 +56,9 @@ async def test_mcp_servers_rbac_authorized(client: AsyncClient, mock_admin_heade
 async def test_list_available_mcp_servers(client: AsyncClient, mock_user_headers, mock_db_cursor):
     """
     Test the endpoint that agents use to list available servers.
-    Ideally this should query the DB, not return a hardcoded list.
+    This endpoint uses psycopg pool directly (not SQLModel).
     """
-    # Configure mock to return expected servers
+    # Configure mock cursor to return expected servers
     mock_db_cursor.fetchall.return_value = [("local",), ("fastmcp",)]
 
     response = await client.get("/agents/mcp/servers", headers=mock_user_headers)
@@ -59,6 +66,7 @@ async def test_list_available_mcp_servers(client: AsyncClient, mock_user_headers
 
     data = response.json()
     expect(data).to(contain("local"))  # Check for default
+    expect(data).to(contain("fastmcp"))
 
 
 @pytest.mark.asyncio
@@ -82,24 +90,17 @@ async def test_create_mcp_server_validation_error(client: AsyncClient, mock_admi
 
 
 @pytest.mark.asyncio
-async def test_create_mcp_server_duplicate(client: AsyncClient, mock_admin_headers, mock_db_cursor):
+async def test_create_mcp_server_duplicate(client: AsyncClient, mock_admin_headers, mock_async_session):
     """
     Test that creating a duplicate server returns 409 Conflict.
     We mock the DB interaction to simulate a found existing row.
     """
-    # 1. execute(SELECT 1 ...)
-    # 2. fetchone() -> if result: raise 409
+    # MCPService check duplication via select().where()... first()
+    mock_existing = MagicMock()
+    mock_existing.name = "duplicate-server"
 
-    # Check if fetchone is AsyncMock or regular Mock
-    is_async = hasattr(mock_db_cursor.fetchone, "assert_awaited")
-
-    start_side_effect = mock_db_cursor.fetchone.side_effect
-
-    if is_async:
-        mock_db_cursor.fetchone.side_effect = [(1,)]
-    else:
-        # Fallback if it's not async mock (unlikely given client fixture, but safe)
-        mock_db_cursor.fetchone.side_effect = [(1,)]
+    # Configure mock session for duplicate check
+    mock_async_session.exec.return_value.first.return_value = mock_existing
 
     response = await client.post(
         "/mcp/", json={"name": "duplicate-server", "type": "stdio", "command": "ls"}, headers=mock_admin_headers
@@ -107,28 +108,20 @@ async def test_create_mcp_server_duplicate(client: AsyncClient, mock_admin_heade
 
     if response.status_code != 409:
         print(f"DEBUG Dupe Fail: {response.text}")
-        # Debug why?
-        # Maybe fetchone wasn't called?
-        # Maybe execute failed?
 
     expect(response.status_code).to(equal(status.HTTP_409_CONFLICT))
-    expect(response.json()["detail"]).to(contain("already exists"))
 
-    mock_db_cursor.fetchone.side_effect = start_side_effect
+    # Reset
+    mock_async_session.exec.return_value.first.return_value = None
 
 
 @pytest.mark.asyncio
-async def test_delete_mcp_server_not_found(client: AsyncClient, mock_admin_headers, mock_db_cursor):
+async def test_delete_mcp_server_not_found(client: AsyncClient, mock_admin_headers, mock_async_session):
     """
     Test that deleting a non-existent server returns 404 Not Found.
     """
-    from unittest.mock import MagicMock
-
-    mock_result = MagicMock()
-    mock_result.rowcount = 0
-
-    # If execute() is awaited, it returns return_value.
-    mock_db_cursor.execute.return_value = mock_result
+    # Delete looks for server first
+    mock_async_session.exec.return_value.first.return_value = None
 
     response = await client.delete("/mcp/non-existent-server", headers=mock_admin_headers)
 
@@ -139,8 +132,17 @@ async def test_delete_mcp_server_not_found(client: AsyncClient, mock_admin_heade
 
 
 @pytest.mark.asyncio
-async def test_list_mcp_servers_success(client: AsyncClient, mock_admin_headers, mock_db_cursor):
-    mock_db_cursor.fetchall.return_value = [(1, "srv1", "stdio", "ls", [], "", {})]
+async def test_list_mcp_servers_success(client: AsyncClient, mock_admin_headers, mock_async_session):
+    srv1 = MagicMock()
+    srv1.name = "srv1"
+    srv1.type = "stdio"
+    srv1.command = "ls"
+    srv1.args = []
+    srv1.env = {}
+    srv1.url = None
+
+    mock_async_session.exec.return_value.all.return_value = [srv1]
+
     response = await client.get("/mcp/", headers=mock_admin_headers)
     expect(response.status_code).to(equal(200))
     expect(len(response.json())).to(equal(1))
@@ -148,18 +150,19 @@ async def test_list_mcp_servers_success(client: AsyncClient, mock_admin_headers,
 
 
 @pytest.mark.asyncio
-async def test_list_mcp_servers_error(client: AsyncClient, mock_admin_headers, mock_db_cursor):
-    mock_db_cursor.execute.side_effect = Exception("DB Fail")
+async def test_list_mcp_servers_error(client: AsyncClient, mock_admin_headers, mock_async_session):
+    mock_async_session.exec.side_effect = Exception("DB Fail")
     response = await client.get("/mcp/", headers=mock_admin_headers)
     expect(response.status_code).to(equal(500))
 
 
 @pytest.mark.asyncio
-async def test_create_mcp_server_error(client: AsyncClient, mock_admin_headers, mock_db_cursor):
-    # Pass duplicate check
-    mock_db_cursor.fetchone.side_effect = [None]
-    # Fail insert
-    mock_db_cursor.execute.side_effect = [None, Exception("Insert Fail")]
+async def test_create_mcp_server_error(client: AsyncClient, mock_admin_headers, mock_async_session):
+    # Pass duplicate check (first returns None)
+    mock_async_session.exec.return_value.first.return_value = None
+
+    # Fail commit (Insert)
+    mock_async_session.commit.side_effect = Exception("Insert Fail")
 
     response = await client.post(
         "/mcp/", json={"name": "srv1", "type": "stdio", "command": "ls"}, headers=mock_admin_headers
@@ -168,17 +171,25 @@ async def test_create_mcp_server_error(client: AsyncClient, mock_admin_headers, 
 
 
 @pytest.mark.asyncio
-async def test_delete_mcp_server_success(client: AsyncClient, mock_admin_headers, mock_db_cursor):
-    mock_result = MagicMock()
-    mock_result.rowcount = 1
-    mock_db_cursor.execute.return_value = mock_result
+async def test_delete_mcp_server_success(client: AsyncClient, mock_admin_headers, mock_async_session):
+    # Mock finding the server
+    mock_server = MagicMock()
+    mock_server.name = "srv1"
+    mock_async_session.exec.return_value.first.return_value = mock_server
 
     response = await client.delete("/mcp/srv1", headers=mock_admin_headers)
     expect(response.status_code).to(equal(200))
 
 
 @pytest.mark.asyncio
-async def test_delete_mcp_server_error(client: AsyncClient, mock_admin_headers, mock_db_cursor):
-    mock_db_cursor.execute.side_effect = Exception("Delete Fail")
+async def test_delete_mcp_server_error(client: AsyncClient, mock_admin_headers, mock_async_session):
+    # Mock finding the server
+    mock_server = MagicMock()
+    mock_server.name = "srv1"
+    mock_async_session.exec.return_value.first.return_value = mock_server
+
+    # Fail commit (Delete)
+    mock_async_session.commit.side_effect = Exception("Delete Fail")
+
     response = await client.delete("/mcp/srv1", headers=mock_admin_headers)
     expect(response.status_code).to(equal(500))

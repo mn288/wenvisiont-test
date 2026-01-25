@@ -1,6 +1,6 @@
-import json
 from typing import Any
 
+import orjson
 from psycopg_pool import AsyncConnectionPool
 
 
@@ -25,12 +25,12 @@ class LogHandler:
         metadata_json = None
 
         if isinstance(content, (dict, list)):
-            text_content_str = json.dumps(content)
+            text_content_str = orjson.dumps(content).decode()
         else:
             text_content_str = str(content)
 
         if metadata:
-            metadata_json = json.dumps(metadata)
+            metadata_json = orjson.dumps(metadata).decode()
 
         # Use Application Time (UTC) to match LangGraph checkpoints
         from datetime import datetime, timezone

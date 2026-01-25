@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Conversation, fetchConversations, deleteConversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MessageSquare, Plus, Loader2, Clock, Trash2, ChevronRight } from 'lucide-react';
-import { SettingsDrawer } from './settings/SettingsDrawer';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -225,7 +224,6 @@ export function HistorySidebar({
 
         <div className="text-muted-foreground border-border flex items-center justify-between border-t p-3 text-xs">
           <span>GenAI Agent Demo v1.0</span>
-          <SettingsDrawer />
         </div>
       </div>
     </>

@@ -81,7 +81,19 @@ export function reconstructStateFromLogs(
       const isStatusMessage = skipPhrases.some((phrase) => log.content.startsWith(phrase));
 
       if (!isStatusMessage && (log.step_name === 'qa' || log.step_name === 'preprocess')) {
-        restoredContent[log.step_name] = (restoredContent[log.step_name] || '') + log.content;
+        // [FIX] Prioritize 'message' logs as the authoritative content source
+        // This ensures that on refresh, we show the clean final message instead of concatenated tokens/thoughts.
+        if (log.log_type === 'message') {
+          restoredContent[log.step_name] = log.content;
+        } else if (log.log_type === 'output' && log.content === 'Done.') {
+          // Allow "Done." to be appended to final content
+          restoredContent[log.step_name] =
+            (restoredContent[log.step_name] || '') + '\n\n' + log.content;
+        } else {
+          // For tokens and thoughts, append to build the stream
+          // Note: If a 'message' comes later in the loop (which it should), it will overwrite this.
+          restoredContent[log.step_name] = (restoredContent[log.step_name] || '') + log.content;
+        }
       }
     }
 

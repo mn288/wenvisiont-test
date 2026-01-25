@@ -32,9 +32,14 @@ class AgentResult(BaseModel):
     task_id: str = Field(..., description="ID of the task this result belongs to")
     summary: str = Field(..., description="Concise summary of the result")
     raw_output: str = Field(..., description="Full output from the agent/tool")
+    assigned_to: str = Field(default="unknown", description="Name of the agent that performed the task")
     artifacts: List[Dict[str, Any]] = Field(default_factory=list, description="Structured artifacts (e.g. usage stats)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Execution metadata (tokens, model, etc.)")
     timestamp: datetime = Field(default_factory=datetime.now)
+
+
+def merge_dict(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    return {**a, **b}
 
 
 class GraphState(TypedDict):
@@ -42,27 +47,35 @@ class GraphState(TypedDict):
 
     # 1. Input
     input_request: str
-    messages: Annotated[List[Any], operator.add]  # Strict conversation history
+    # Strict conversation history with add_messages reducer
+    # This handles the "rolling window" naturally via checkpointer features if needed,
+    # or we can trust the list to grow and prune it in a node or util.
+    messages: Annotated[List[Any], operator.add]
 
     # 2. Strict Task Management
-    # We treat 'tasks' as a log of all assignments.
-    # We treat 'results' as a log of all completions.
-    tasks: Annotated[List[Dict[str, Any]], operator.add]  # Serialized AgentTask
-    results: Annotated[List[Dict[str, Any]], operator.add]  # Serialized AgentResult
+    # Tasks and Results log. using append (operator.add)
+    tasks: Annotated[List[Dict[str, Any]], operator.add]
+    results: Annotated[List[Dict[str, Any]], operator.add]
 
     # 3. Flow Control
-    # 'next_step' determines where the graph goes next.
     next_step: Optional[List[str]]
 
-    # 4. Global Context (Accumulated findings for the LLM)
-    # Replaces loose 'intermediate_findings', 'research_output'
-    context: Annotated[Optional[str], reduce_str]
+    # 3.5. Recursive Planning (Plan-and-Execute)
+    # The active plan of future steps.
+    plan: Annotated[List[str], lambda x, y: y]  # Overwrite reducer
+
+    # 4. Global Context (The "Knowledge")
+    global_state: Annotated[Dict[str, Any], merge_dict]
 
     # 5. Final Output
     final_response: Optional[str]
     errors: Annotated[List[str], operator.add]
 
-    # 6. Legacy / Transition (Keep temporarily to avoid massive breakage during refactor)
-    # We will mark these as deprecated
-    tool_call: Optional[Dict[str, Any]]  # Deprecated: Use tasks
-    structured_history: Annotated[List[Dict[str, str]], operator.add]  # Deprecated: Use results
+    # 6. Safety
+    retry_count: int
+    last_agent: Optional[str]
+
+    # 7. Legacy / Deprecated (Keep for compatibility if code references them, or remove if safe)
+    # We will remove 'conversation_buffer' and 'long_term_summary' as they are manual reinventions.
+    # We keep 'context' as a simple string reducer for summaries if needed
+    context: Annotated[Optional[str], reduce_str]
