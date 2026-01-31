@@ -1,8 +1,8 @@
 from crewai import Crew
 
-from src.brain.registry import AgentRegistry
-from src.models.infrastructure import InfrastructureConfig
-from src.models.state import AgentResult, AgentTask
+from brain.registry import AgentRegistry
+from models.infrastructure import InfrastructureConfig
+from models.state import AgentResult, AgentTask
 
 
 class CrewService:

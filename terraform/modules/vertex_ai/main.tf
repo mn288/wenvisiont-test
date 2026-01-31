@@ -14,39 +14,39 @@ variable "vpc_id" {
 }
 
 variable "encryption_key_name" {
-    description = "KMS Key for encryption"
-    type = string
-    default = null
+  description = "KMS Key for encryption"
+  type        = string
+  default     = null
 }
 
 # Enable Vertex AI API
 resource "google_project_service" "vertex_ai" {
-  project = var.project_id
-  service = "aiplatform.googleapis.com"
+  project            = var.project_id
+  service            = "aiplatform.googleapis.com"
   disable_on_destroy = false
 }
 
 # Vertex AI Vector Search Index (Tier 2 RAG)
 resource "google_vertex_ai_index" "vector_index" {
-  project  = var.project_id
-  region   = var.region
+  project      = var.project_id
+  region       = var.region
   display_name = "${var.project_id}-vector-index"
   description  = "Vector index for session-based RAG"
-  
+
   metadata {
     config {
-      dimensions = 768 # Standard for Gecko/Gemini embeddings
+      dimensions                  = 768 # Standard for Gecko/Gemini embeddings
       approximate_neighbors_count = 150
-      distance_measure_type = "DOT_PRODUCT_DISTANCE"
+      distance_measure_type       = "DOT_PRODUCT_DISTANCE"
       algorithm_config {
         tree_ah_config {
-          leaf_node_embedding_count = 500
+          leaf_node_embedding_count    = 500
           leaf_nodes_to_search_percent = 7
         }
       }
     }
   }
-  
+
   index_update_method = "STREAM_UPDATE" # Important for real-time additions
 
   depends_on = [google_project_service.vertex_ai]
@@ -54,20 +54,20 @@ resource "google_vertex_ai_index" "vector_index" {
 
 # Vertex AI Vector Search Endpoint
 resource "google_vertex_ai_index_endpoint" "vector_endpoint" {
-  project  = var.project_id
-  region   = var.region
-  display_name = "${var.project_id}-vector-endpoint"
+  project                 = var.project_id
+  region                  = var.region
+  display_name            = "${var.project_id}-vector-endpoint"
   public_endpoint_enabled = false
-  network = var.vpc_id
-  
+  network                 = var.vpc_id
+
   depends_on = [google_project_service.vertex_ai]
 }
 
 resource "google_vertex_ai_index_endpoint_deployed_index" "deployed_index" {
-  index_endpoint = google_vertex_ai_index_endpoint.vector_endpoint.id
-  index          = google_vertex_ai_index.vector_index.id
+  index_endpoint    = google_vertex_ai_index_endpoint.vector_endpoint.id
+  index             = google_vertex_ai_index.vector_index.id
   deployed_index_id = "deployed_vector_index"
-  display_name   = "deployed-vector-index"
+  display_name      = "deployed-vector-index"
 
   # Automatic scaling
   dedicated_resources {
@@ -85,8 +85,8 @@ resource "google_vertex_ai_index_endpoint_deployed_index" "deployed_index" {
 # until TF resources mature. However, we can create the DataStore.
 
 resource "google_project_service" "discovery_engine" {
-  project = var.project_id
-  service = "discoveryengine.googleapis.com"
+  project            = var.project_id
+  service            = "discoveryengine.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -94,9 +94,9 @@ resource "google_project_service" "discovery_engine" {
 # resource "google_discovery_engine_data_store" "corp_knowledge" { ... }
 
 output "vector_index_endpoint_id" {
-    value = google_vertex_ai_index_endpoint.vector_endpoint.name
+  value = google_vertex_ai_index_endpoint.vector_endpoint.name
 }
 
 output "vector_index_id" {
-    value = google_vertex_ai_index.vector_index.name
+  value = google_vertex_ai_index.vector_index.name
 }

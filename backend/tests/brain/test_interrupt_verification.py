@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
-from src.brain.graph import workflow
+from brain.graph import build_workflow
 
 
 @pytest.mark.asyncio
@@ -12,7 +12,14 @@ async def test_graph_interrupt_tools():
     checkpointer = MemorySaver()
 
     # Compile graph with same interrupts as production
-    graph = workflow.compile(checkpointer=checkpointer, interrupt_before=["qa", "tools"])
+    # Compile graph with same interrupts as production
+    workflow = build_workflow()
+
+    # Ensure tool_execution exists before interrupting (though mock graph might fail if no agents)
+    # The build_workflow() uses AgentRegistry.
+    # For unit test, registry might be empty, but static nodes exist.
+
+    graph = workflow.compile(checkpointer=checkpointer, interrupt_before=["qa", "tool_execution"])
 
     # Mock state that should route to 'tools'
     # We can force the next_step to 'tools' via the supervisor decision logic
@@ -38,9 +45,9 @@ async def test_graph_interrupt_tools():
     if interrupts is None:
         interrupts = graph.interrupt_before
 
-    assert "tools" in interrupts
+    assert "tool_execution" in interrupts
     assert "qa" in interrupts
-    print("Graph correctly configured to interrupt before 'tools' and 'qa'.")
+    print("Graph correctly configured to interrupt before 'tool_execution' and 'qa'.")
 
 
 if __name__ == "__main__":

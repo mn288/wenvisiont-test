@@ -16,15 +16,15 @@ resource "google_cloud_run_v2_service" "backend" {
 
   template {
     service_account = google_service_account.backend_sa.email
-    
+
     containers {
       image = var.backend_image
-      
+
       env {
         name  = "DATABASE_URL"
         value = var.database_url
       }
-      
+
       env {
         name  = "API_V1_STR"
         value = "/api/v1"
@@ -48,16 +48,16 @@ resource "google_cloud_run_v2_service" "frontend" {
 
   template {
     service_account = google_service_account.frontend_sa.email
-    
+
     containers {
       image = var.frontend_image
-      
+
       env {
         name  = "NEXT_PUBLIC_API_URL"
         value = "/api" # Relative path when behind LB
       }
     }
-    
+
     vpc_access {
       network_interfaces {
         network    = var.vpc_name

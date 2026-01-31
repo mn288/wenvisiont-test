@@ -3,8 +3,8 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 
-from src.core.database import pool
-from src.models.mcp import MCPServerConfig, MCPServerCreate
+from core.database import pool
+from models.mcp import MCPServerConfig, MCPServerCreate
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 

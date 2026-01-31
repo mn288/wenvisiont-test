@@ -1,0 +1,451 @@
+AWP Agentic Workflow Platform
+Architecture Study
+Mohamad NABAA
+20 Janvier 2026
+Bonjour à tout et à tous ! 
+Je m'appelle Mohamad Nabaa. 
+J'ai 15 ans d'expérience dans le domaine technologique, dont 8 ans comme architecte de solutions et 4 ans dans le domaine de l'IA générique. 
+Dans le cadre de ce processus de recrutement, vous m'avez demandé de préparer une présentation architecturale pour un client du secteur du luxe.
+La présentation couvrira :
+
+1
+
+Sommaire
+Index
+01
+Introduction
+02
+Logical Architecture
+03
+Physical Architecture
+04
+RAG Strategies
+05
+Advantages
+06
+TCO & Roadmap
+07
+Conclusion
+2
+
+Vision
+Transform from Static Chatbot to Sovereign Agentic Platform
+Use Case
+LUXE Sector client with 25000 internal users, are using a static chatbot that provides information but lack the capability to perform autonomous operational actions.
+Introduction 
+Objective
+Create a Sovereign Agentic-powered "Virtual Team" that executes complex tasks while keeping the human in the loop for actions.
+Cas d’usage : Un client du secteur du luxe a 25 000 utilisateurs internes qui utilisent un chatbot statique sur leur intranet.
+Un client du secteur du luxe compte 25 000 utilisateurs internes qui utilisent un chatbot statique sur leur intranet.
+L'objectif est de développer une plateforme agentique pour renforcer les compétences de vos collaborateurs.
+
+
+Logical Architecture
+Logical Architecture (The "Virtual Team")
+Stateful Multi-Agent Orchestration with End-to-End Observability
+Pour cette plateforme agentique :
+Nous avons choisi le modèle Superviseur/Agent pour garantir une gouvernance centralisée.
+ Un superviseur (LangGraph) orchestre des agents spécialisés (CrewAI) 
+capables d'exécuter des actions complexes via leurs outils connectés.
+Chaque décision prise par l'IA est tracée et remontée par Langfuse vers Cloud Logging pour garantir une transparence et une observabilité totales.
+
+4
+
+Physical Architecture
+Physical Architecture
+Zero-Trust Serverless Enclave for Enterprise GenAI (europe-west-9)
+Pour l’architecture physique souveraine et Zero-Trust :
+Nous avons choisi un design serverless pour notre orchestrateur avec Confidential GKE Autopilot (incluant le chiffrement de lamémoire au niveau matériel (AMD SEV-SNP).
+Côté réseau, nous intégrons :
+VPC Service Control (région europe-west-9).
+Une Sovereign Access Gate avec IAP Auth + Access Approval.
+Cloud NAT pour la gestion de l'EGRESS.
+
+
+================================================================================================================================================================================Zero-Trust Hardware-Enforced Enclave (europe-west-9)
+Infrastructure Breakdown:
+Orchestrator (The Brain): Confidential GKE Autopilot running LangGraph. Hardware-level memory encryption (AMD SEV-SNP) ensures the supervisor's reasoning logic is invisible to the provider.
+Vertex AI Endpoints. BUT can change to Models deployed on N2D/C3 machine types with the "Confidential Computing" toggle enabled to eliminate the "RAM Gap" during processing
+Sovereign Access Gate: IAP Auth + Access Approval. Dual-layer security requiring explicit user identity verification and time-bound client approval before any administrative provider access.
+Networking: VPC Service Control (europe-west-9) perimeter encompassing all components to prevent data exfiltration to unauthorized external IPs.
+
+5
+
+Architecture
+Architecture
+Asynchronous Python native stack
+Here's a breakdown of our technical architecture:
+Stack
+LangGraph for graph orchestration, LangChain for native tools
+CrewAI for agent implementation
+FastAPI for the async server runtime
+FastMCP for MCP server/client services
+Terraform: Infrastructure as Code
+Observability
+Langfuse Monitoring traces every graph node state transition, exports logs to Cloud Logging and Grafana or (Cloud Trace) for production monitoring.
+Governance
+Sensitive Data Protection sidecar: (GCP managed service) for PII redaction at ingress and industry standard guard rails
+
+Interrupt-based approval flow for high-risk or agent flagged actions (Human-in-Loop validated via IAP identity).
+Model Armor: Intent Validation, blocking malicious "jailbreak" commands or prompt injections before they reach the LLM orchestrator.
+6
+
+RAG Strategies
+Multi-Modal Agentic RAG
+Autonomous Multi-Source Intelligence: Orchestrating Hybrid Retrieval with Self-Correcting Logic and Enterprise-Grade Governance
+Pattern A: Adaptive Semantic Search
+(Unstructured) 
+Vector Engine: Vertex AI RAG Engine using text-embedding-005 for high-dimensional accuracy.
+
+Chunking Strategy: Layout-Aware & Semantic Chunking to preserve document hierarchy.
+
+Reranking: Cross-Encoder Rerankernode to score the most relevant 3-5 passages, reducing "lost in the middle" hallucinations.
+
+Pattern B: Verified Analytical Query (Structured)
+Engine: LangChain Semantic Text-to-SQL feeding into BigQuery.
+
+
+Governance: Mandatory Dry Run Validation via a Read-Only Service Account to ensure zero data-leakage.
+
+Few-Shot examples: Uses a vector store of "Golden Query-SQL" pairs to guide the agent in generating high-accuracy queries for complex luxury inventory metrics.
+
+Pattern C: Hybrid Agentic Orchestrator (Cross-Source)
+Logic: LangGraph Supervisor decomposes complex multi-source requests (e.g., "Compare sales trends against last month's policy update").
+
+Self-Correction Loop: If the initial retrieval is irrelevant, a Query Transformation node automatically rewrites the prompt and triggers a second search attempt.
+
+Le Mémoire Externe de notre client a:Unstructured Data: Confluence+Drive + RAG Ephemeral
+Structured Data: BigQuery
+7
+
+Comparative Analysis
+Advantages
+Advantage
+Agentic Platform Capability
+Operational Efficiency
+Agents offload L1/L2 support and operational cost
+Reduced MTTR
+Automated workflows vs manual processes
+Control
+100% EU Data Residency with Zero-Trust security in a serverless enclave.
+Full ownership of the "AI Brain," specialized logic, and system connectors.
+Sovereignty
+Scalability
+Horizontal, demand-driven scaling with usage-dependent serverless costing.
+Économies : Réduction drastique des frais de support (L1/L2).
+Vitesse : Automatisation des workflows vs processus manuels.
+Contrôle : Souveraineté UE vs Opacité des modèles standards.
+Flexibilité : Paiement à l'usage (Serverless) vs Coûts fixes.
+
+8
+
+Planification
+TCO & Roadmap
+Build Phase
+CapEx: Estimated Cost: €480K->€660K
+3-6 months, Requires 6-7 FTE Squad:
+1 Cloud Architect
+2 Senior AI Engineer
+1 Data Engineer
+1 DevSecOps / Security Architect
+Run Phase
+OpEx: Infrastructure €8,000 - €10,000 / month in pilot phase
+GCP Infrastructure + LLM Tokens for ~1k users
+Operational Team
+Requires 2.5 FTE -> (Platform Engineer + FinOps/Security Analyst ) + 0.5 FTE to maintain connectors and governance
+1 UX/Product Lead
+1 Frontend Dev
+9
+
+Conclusion
+Agentic Workflow Platform
+Total replacement of a static chatbot. 
+Activates autonomous agents with a human in the loop while preserving observability and governance. Scalable on demand and secure.
+Budget
+Cost Offset
+Development budget replaces recurring 1 year for most of L1/L2 support cost.
+Value
+Ownership
+We own the "Brain" and the "Connectors" (no Black Box SaaS).
+En résumé : ont remplace un coût récurrent par un actif stratégique sécurisé, souverain et performant
+10
+
+Merci
+Q/A
+
+Annex
+
+
+Phase
+Timeline
+Key Activities
+Technical Focus
+Foundation
+Month 1-2
+Setup VPC Service Controls & Confidential GKE Cluster.
+Security: Establishing the Zero-Trust serverless enclave in europe-west-9
+Logic & Agents
+Month 2-3
+Develop the LangGraph Supervisor and specialized CrewAI agents (IT, Ops, Analyst).
+Orchestration: Implementing stateful multi-agent flows with FastAPI and LangGraph.
+
+Resilience (Queue)
+Month 3-4
+Implement Cloud Tasks for long-running (3–5 min) actions and Transient RAG processing.
+
+Connects the Confidential GKE orchestrator to asynchronous background services for higher reliability
+End-User HITL
+Month 4-5
+Integrating the "Interrupt" UI to facilitate Human-in-the-Loop (HITL) approvals for high-risk actions.
+Governance: Using IAP identity to validate high-risk actions before execution
+Run Phase
+Month 6+
+Production rollout to 25k users with 100% EU residency.
+Scalability: Managed by horizontal, demand-driven serverless scaling via Confidential GKE Autopilot.
+
+Zero Trust
+
+Run Phase Scaling 
+Service Category
+Estimated Cost
+Core Purpose & Governance
+Confidential Compute
+€800
+Management fee for GKE Autopilot and the minimum "warm" pods for the LangGraph Supervisor. Includes the premium for RAM Encryption.
+Knowledge Search Index
+€600
+Continuous hosting of the Vertex AI Search vector store to ensure RAG data (Confluence/Drive) is instantly available.
+Stateful Data Tier
+€250
+Cloud SQL (HA) instance for stateful multi-agent checkpointing, ensuring conversation continuity.
+Security & Perimeter
+€250
+Fixed costs for VPC Service Controls, IAP Authentication, Cloud NAT, and Secret Manager.
+Networking & LB
+€470
+Global External HTTP(S) LB with US-based Anycast IP and cross-region data transfer .
+TOTAL BASELINE
+€2370
+Minimum "Sovereign Tax" for a Zero-Trust Enclave.
+Month
+Phase
+Active Users (MAU)
+Fixed Infra Baseline
+Scaling Infra Cost
+LLM Token Cost
+Total Monthly OpEx
+M1
+Foundation/Pilot
+500
+€2 370,00
+€200
+€3 850,00
+€6 420,00
+M2
+Early Adopters
+1000
+€2 370,00
+€400
+€7 700,00
+€10 470,00
+M3
+Scaling (L3/Ops)
+2500
+€2 370,00
+€1 000,00
+€19 250,00
+€22 620,00
+M4
+Expansion
+5000
+€2 370,00
+€20 000,00
+€38 500,00
+€60 870,00
+M5
+Majority Rollout
+10000
+€2 370,00
+€4 050,00
+€51 000,00
+€57 420,00
+M6
+Full Adoption
+18000
+€2 370,00
+€7 250,00
+€73 500,00
+€83 120,00
+M7
+Retention/Opt.
+22000
+€2 370,00
+€8 900,00
+€89 800,00
+€101 070,00
+M8
+Steady State
+25000
+€2 370,00
+€10 100,00
+€102 000,00
+€114 470,00
+
+Operational Maturity (Day 2)
+Capability
+Implementation
+Value
+Observability
+Distributed Tracing
+(Langfuse/opentelemtery)
+User flagged response (hallucination) is traced back to the specific retrieved document or agent decision.
+QA & Testing
+"Golden Dataset" Regression + Continuous Benchmarking
+CI/CD pipeline runs 100+ standard questions to ensure new code doesn't degrade answer quality.
+Resilience
+Circuit Breakers
+Graceful degradation if a tool (e.g., ServiceNow) is slow or down.
+Continuous Benchmarking (To catch prompt drift/LLM updates)
+
+
+Observability: Si un utilisateur "flague" une réponse (hallucination), on peut remonter instantanément au document source ou à la décision précise de l'agent.
+QA & Testing: On fait tourner plus de 100 tests de non-régression à chaque mise à jour du code via la CI/CD pour garantir que la qualité des réponses ne dégrade pas.
+Résilience:En cas de lenteur ou de panne d'un outil externe (ex: ServiceNow), le système bascule en "mode dégradé" proprement au lieu de planter.
+
+Cloud Run (Services & Workers): ~€600 - €800 / month
+Cloud Run (Jobs - Connectors): ~€30 - €60 / month
+Compute & Application Hosting
+Cloud SQL (PostgreSQL HA): ~€250 - €400 / month
+Vertex AI Search (Vector Store): ~€600 - €1,000 / month
+Cloud Storage (GCS): ~€50 - €100 / month
+Memorystore (Redis) - Optional: ~€40 - €150 / month
+Data & Storage
+Vertex AI (Gemini Models): ~€200 - €500 / month
+Security & Networking (The "Enterprise" Premium)
+Cloud Armor + Load Balancer: ~€40 - €100 / month
+Cloud NAT: ~€50 / month
+Secret Manager & KMS: ~€50 - €80 / month
+AI & Intelligence
+Cloud Logging & Monitoring: ~€100 - €200 / month
+Dataplex (Data Quality): ~€100 - €200 / month
+Observability & Operations
+Vertex AI Search ($2.50 / 1k queries): 
+
+If 1,000 users ask 5 questions a day, and your "Researcher Agent" decides to perform 3 searches per question to "refine results,”
+
+$1,000 \text{ users} \times 5 \text{ Qs} \times 3 \text{ searches} \times 20 \text{ days} = 300,000 \text{ queries/mo} = $750
+
+Critical Risk: If a bug causes the agent to loop 10 times instead of 3, this cost triples overnight.
+
+Solution: Hard-limit the number of tool calls per turn in your LangGraph definition.
+
+
+Physical Architecture
+Physical Architecture
+Contractual Trust Serverless Enclave for Enterprise GenAI (europe-west-9)
+Le cœur du système est isolé au sein d'un périmètre VPC Service Controls sur GCP, garantissant que les données ne quittent jamais cet environnement sécurisé.
+Identité et Accès : l'authentification est gérée par IAP (Identity-Aware Proxy), assurant la propagation de l'identité de l'utilisateur.
+Souveraineté des Données : les données sont localisées en Europe (EU Residency).
+Connectivité Maîtrisée : tous les flux passent par un Cloud NAT avec une adresse IP fixe autorisée (whitelisted), sécurisant les échanges via REST/OAuth.
+Scalabilité Serverless : l'utilisation de Cloud Run permet une mise à l'échelle automatique selon l'usage, optimisant les coûts tout en supportant une charge allant jusqu'à 25 000 utilisateurs.
+18
+
+Analyse Comparative
+Advantages(Contractual)
+Advantage
+Static Chatbot (Current)
+Agentic Platform Capability
+Architectural Solution
+Operational Efficiency
+High L1/L2 support costs (€1M+ annually) for 25k users.
+Agents offload L1/L2 support and operational actions and their recurrent cost.
+Supervisor (LangGraph) & CrewAI Agents
+Reduced MTTR
+Response and resolution times are bottlenecked by human intervention.
+Faster response times with minimal human intervention through automated workflows.
+Supervisor (LangGraph) & CrewAI Agents
+Data Sovereignty
+Reliance on "Black Box" SaaS with vague GDPR and data residency controls.
+100% EU Data Residency with Zero-Trust security in a serverless enclave.
+VPC Service Control(europe-west-9)
+System Ownership
+Renting a platform where the reasoning logic is a vendor secret.
+Full ownership of the "AI Brain," specialized logic, and system connectors.
+FastAPI Native Stack& FastMCP Connectors
+Security & Privacy
+Limited ability to filter or redact sensitive data before LLM processing.
+Integrated PII redaction and identity propagation for secure operations.
+Cloud SDP & IAP Authentication
+Scalable TCO
+Inflexible scaling; costs don't align perfectly with actual usage.
+Horizontal, demand-driven scaling with usage-dependent serverless costing.
+Cloud Run & Serverless Scaling
+19
+
+Phase
+Timeline
+Key Activities
+Technical Focus
+Foundation
+Month 1-2
+Setup GCP Landing Zone, VPC Service Controls, and IAP Auth)
+Security: Establishing the Zero-Trust serverless enclave in europe-west-9
+Logic & Agents
+Month 2-3
+Develop the LangGraph Supervisor and specialized CrewAI agents (IT, Ops, Analyst).
+Orchestration: Implementing stateful multi-agent flows with FastAPI and LangGraph.
+
+Resilience (Queue)
+Month 3-4
+Implement Cloud Tasks for long-running (3–5 min) actions and Transient RAG processing.
+
+Connects the Cloud Run orchestrator to asynchronous background services for higher reliability
+End-User HITL
+Month 4-5
+Integrating the "Interrupt" UI to facilitate Human-in-the-Loop (HITL) approvals for high-risk actions.
+Governance: Using IAP identity to validate high-risk actions before execution
+Run Phase
+Month 6+
+Production rollout to 25k users with 100% EU residency.
+Scalability: Managed by horizontal, demand-driven serverless scaling via Cloud Run.
+
+Contractual Trust
+
+RAG Strategies
+Multiple sources of KB seamlessly integrated in the pipeline
+Corporate Knowledge (Confluence, Drive)
+Vertex AI Agent Builder
+Secure with Private Service Connect
+Structured Business Data (BigQuery)
+Semantic Text-to-SQL (Langchain Tool) exposed to agent
+text-embedding-004
+Vector Search on preingested (worker based) structured schema embeddings
+DRY RUN with authorized functions with Read-Only via Service Account
+Transient Uploads
+Presigned URL Upload
+Vertex AI Layout-Aware Chunking
+text-embedding-004
+Vertex AI RAG Engine configured for Semantic Chunking
+21
+
+Composant GCP 
+Équivalent Kubernetes Natif / Souverain
+Fonction Clé
+VPC Service Control
+Cilium + Network Policies
+Isolation logique et segmentation L7.
+IAP + Access Approval
+Keycloak + OAuth2 Proxy + Teleport
+Authentification forte et accès conditionnel.
+Cloud NAT
+Cilium / Istio Egress Gateway
+Contrôle et traçabilité des flux sortants.
+GKE Autopilot
+RKE2 ou Talos Linux
+Orchestration durcie et immuable.
+Confidential GKE (SEV)
+Confidential Containers (CoCo)
+Chiffrement de la RAM au niveau matériel.
+Service Heavy vs Asset Heavy
+Same CapEx but whatever you offload from LLM tokens will be paid for the team+ renovation and retention over the long run. You will ending up chasing the latest in tech and although no vendor lockin, but latest tech and offering will always come in late.
+Unless you have a team of DS continuously adapting tto the latest and innovating on your data/needs. Then you will be replacing the L1/L2 on the service line with your own Datacenter heavy

@@ -16,7 +16,7 @@ resource "google_sql_database_instance" "instance" {
       enabled    = true
       start_time = "02:00"
     }
-    
+
     # CMEK integration
     # Note: Service Account for Cloud SQL needs permissions on the key first.
     # disk_encryption_configuration {

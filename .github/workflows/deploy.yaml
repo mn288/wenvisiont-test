@@ -14,7 +14,7 @@ env:
   PROJECT_ID: "${{ secrets.GCP_PROJECT_ID }}"
   REGION: "europe-west9"
   SERVICE_NAME: "backend"
-  WIF_PROVIDER: "${{ secrets.GCP_WIF_PROVIDER }}" # projects/12345/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  WIF_PROVIDER: "${{ secrets.GCP_WIF_PROVIDER }}"
   WIF_SERVICE_ACCOUNT: "${{ secrets.GCP_WIF_SA_EMAIL }}"
 
 jobs:
@@ -50,12 +50,47 @@ jobs:
           docker build -t "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}" .
           docker push "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}"
 
-      - name: Deploy to Cloud Run
+      # =====================================================================
+      # AWP GCP Sovereign Infrastructure Deployment
+      # =====================================================================
+      - name: Deploy to Cloud Run (Zero-Trust)
         run: |-
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}" \
             --region=${{ env.REGION }} \
             --service-account=${{ env.WIF_SERVICE_ACCOUNT }} \
+            --ingress=internal-and-cloud-load-balancing \
+            --no-allow-unauthenticated \
+            --vpc-connector=awp-vpc-connector \
+            --vpc-egress=all-traffic \
+            --cpu=2 \
+            --memory=2Gi \
+            --timeout=300 \
+            --concurrency=80 \
             --set-env-vars="DB_PASSWORD=${{ steps.secrets.outputs.DB_PASSWORD }}" \
             --set-env-vars="OPENAI_API_KEY=${{ steps.secrets.outputs.OPENAI_API_KEY }}" \
+            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }}" \
+            --set-env-vars="GCP_REGION=${{ env.REGION }}" \
+            --set-env-vars="BACKEND_URL=https://backend-${{ env.PROJECT_ID }}.${{ env.REGION }}.run.app" \
+            --set-env-vars="BACKEND_SA_EMAIL=${{ env.WIF_SERVICE_ACCOUNT }}" \
+            --set-env-vars="CLOUD_TASKS_ENABLED=true" \
+            --set-env-vars="CLOUD_TASKS_QUEUE=awp-agent-actions" \
+            --set-env-vars="SDP_ENABLED=true" \
+            --set-env-vars="CLOUD_LOGGING_ENABLED=true" \
+            --set-env-vars="CLOUD_TRACE_ENABLED=true" \
             --quiet
+
+      - name: Tag as Latest
+        run: |-
+          gcloud artifacts docker tags add \
+            "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:${{ github.sha }}" \
+            "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/app-images/${{ env.SERVICE_NAME }}:latest" \
+            --quiet
+
+      - name: Output Deployment URL
+        run: |-
+          echo "✅ Deployed to Cloud Run"
+          echo "🔒 Access via IAP-protected Load Balancer only"
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)'

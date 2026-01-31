@@ -72,7 +72,6 @@ async def seed_mcp_servers():
     Backend connects via SSE (Server-Sent Events).
     """
 
-
     # 1. FILESYSTEM SERVER
     try:
         existing = await mcp_service.get_servers_by_names(["filesystem"])
@@ -137,3 +136,46 @@ async def seed_mcp_servers():
             print("SEEDER: 'analysis-mcp' MCP server created successfully.")
     except Exception as e:
         print(f"SEEDER: Failed to seed Analysis MCP: {e}")
+    try:
+        existing_rag = await mcp_service.get_servers_by_names(["gcp-rag"])
+        if not existing_rag:
+            print("SEEDER: Creating default 'gcp-rag' MCP server (STDIO)...")
+
+            # Helper to find python executable and script path
+            import sys
+
+            python_exe = sys.executable
+            # Relative to /app/backend or cwd
+            script_path = os.path.abspath("src/tools/rag.py")
+            if not os.path.exists(script_path):
+                # Try relative to this file?
+                script_path = "/app/backend/src/tools/rag.py"
+
+            server_payload_rag = MCPServerCreate(name="gcp-rag", type="stdio", command=python_exe, args=[script_path])
+
+            await mcp_service.create_server(server_payload_rag)
+            print("SEEDER: 'gcp-rag' MCP server created successfully.")
+    except Exception as e:
+        print(f"SEEDER: Failed to seed GCP RAG MCP: {e}")
+
+    # 6. GCP BIGQUERY SERVER (STDIO via Python)
+    try:
+        existing_bq = await mcp_service.get_servers_by_names(["gcp-bigquery"])
+        if not existing_bq:
+            print("SEEDER: Creating default 'gcp-bigquery' MCP server (STDIO)...")
+
+            import sys
+
+            python_exe = sys.executable
+            script_path = os.path.abspath("src/tools/bigquery.py")
+            if not os.path.exists(script_path):
+                script_path = "/app/backend/src/tools/bigquery.py"
+
+            server_payload_bq = MCPServerCreate(
+                name="gcp-bigquery", type="stdio", command=python_exe, args=[script_path]
+            )
+
+            await mcp_service.create_server(server_payload_bq)
+            print("SEEDER: 'gcp-bigquery' MCP server created successfully.")
+    except Exception as e:
+        print(f"SEEDER: Failed to seed GCP BigQuery MCP: {e}")

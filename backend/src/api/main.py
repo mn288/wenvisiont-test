@@ -10,6 +10,7 @@ from api.v1.endpoints.history import router as history_router
 from api.v1.endpoints.infrastructure import router as infra_router
 from api.v1.endpoints.mcp import router as mcp_router
 from api.v1.endpoints.stats import router as stats_router
+from api.v1.endpoints.tasks import router as tasks_router
 from api.v1.endpoints.workflows import router as workflow_router
 from core.lifespan import lifespan
 from core.middleware import configure_middleware
@@ -31,6 +32,7 @@ app.include_router(files_router, prefix="/files", tags=["files"])
 app.include_router(execution_router, tags=["execution"])  # Root level as used directly
 app.include_router(history_router, prefix="/history", tags=["history"])
 app.include_router(stats_router, prefix="/stats", tags=["stats"])
+app.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 
 
 @app.get("/health")

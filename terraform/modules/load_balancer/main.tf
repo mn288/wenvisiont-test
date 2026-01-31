@@ -41,7 +41,7 @@ resource "google_compute_backend_service" "frontend_backend" {
   protocol    = "HTTP"
   port_name   = "http"
   timeout_sec = 30
-  
+
   security_policy = var.security_policy_id
 
   backend {
@@ -49,7 +49,7 @@ resource "google_compute_backend_service" "frontend_backend" {
   }
 
   log_config {
-    enable = true
+    enable      = true
     sample_rate = 1.0
   }
 }
@@ -60,15 +60,15 @@ resource "google_compute_backend_service" "api_backend" {
   protocol    = "HTTP"
   port_name   = "http"
   timeout_sec = 30
-  
+
   security_policy = var.security_policy_id
 
   backend {
     group = var.backend_neg
   }
-  
+
   log_config {
-    enable = true
+    enable      = true
     sample_rate = 1.0
   }
 }
@@ -117,4 +117,19 @@ resource "google_compute_global_forwarding_rule" "default" {
 
 output "load_balancer_ip" {
   value = google_compute_global_forwarding_rule.default.ip_address
+}
+
+output "backend_service_id" {
+  description = "Backend service ID for IAP binding"
+  value       = google_compute_backend_service.api_backend.id
+}
+
+output "backend_service_name" {
+  description = "Backend service name for IAP binding"
+  value       = google_compute_backend_service.api_backend.name
+}
+
+output "frontend_backend_service_id" {
+  description = "Frontend backend service ID"
+  value       = google_compute_backend_service.frontend_backend.id
 }

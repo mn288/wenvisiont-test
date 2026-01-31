@@ -17,12 +17,12 @@ resource "google_redis_instance" "cache" {
   name           = "${var.project_id}-redis"
   memory_size_gb = 1
   region         = var.region
-  
+
   # Use a tier that supports basic availability or HA depending on requirements
-  tier = "BASIC" 
+  tier = "BASIC"
 
   authorized_network = var.vpc_id
-  
+
   redis_version = "REDIS_6_X"
   display_name  = "Session Cache"
 

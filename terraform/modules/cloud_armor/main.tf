@@ -1,7 +1,7 @@
 
 
 resource "google_compute_security_policy" "policy" {
-  name = "${var.project_id}-security-policy"
+  name        = "${var.project_id}-security-policy"
   description = "Cloud Armor security policy with OWASP rules"
 
   # Default Rule: Deny All (Best practice, allowlist approach) or Allow All depending on risk profile.
@@ -41,14 +41,14 @@ resource "google_compute_security_policy" "policy" {
     }
     description = "XSS Protection"
   }
-  
+
   # LFI/RFI
   rule {
     action   = "deny(403)"
     priority = "1002"
     match {
       expr {
-       expression = "evaluatePreconfiguredExpr('lfi-v33-stable') || evaluatePreconfiguredExpr('rfi-v33-stable')"
+        expression = "evaluatePreconfiguredExpr('lfi-v33-stable') || evaluatePreconfiguredExpr('rfi-v33-stable')"
       }
     }
     description = "LFI/RFI Protection"
