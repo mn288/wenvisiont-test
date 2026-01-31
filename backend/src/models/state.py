@@ -14,6 +14,17 @@ def reduce_str(a: Optional[str], b: Optional[str]) -> str:
     return f"{a}\n\n{b}"
 
 
+class Citation(BaseModel):
+    """A strictly typed citation for source attribution."""
+
+    source_id: str = Field(..., description="Unique ID of the source (e.g. filename, url)")
+    uri: str = Field(..., description="URI or path to the source")
+    title: Optional[str] = Field(None, description="Human readable title")
+    snippet: Optional[str] = Field(None, description="Relevant content snippet")
+    score: Optional[float] = Field(None, description="Relevance score if applicable")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
 class AgentTask(BaseModel):
     """A strictly typed task allocated to an agent."""
 
@@ -34,6 +45,7 @@ class AgentResult(BaseModel):
     raw_output: str = Field(..., description="Full output from the agent/tool")
     assigned_to: str = Field(default="unknown", description="Name of the agent that performed the task")
     artifacts: List[Dict[str, Any]] = Field(default_factory=list, description="Structured artifacts (e.g. usage stats)")
+    citations: List[Citation] = Field(default_factory=list, description="Source citations backing this result")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Execution metadata (tokens, model, etc.)")
     timestamp: datetime = Field(default_factory=datetime.now)
 
@@ -56,6 +68,9 @@ class GraphState(TypedDict):
     # Tasks and Results log. using append (operator.add)
     tasks: Annotated[List[Dict[str, Any]], operator.add]
     results: Annotated[List[Dict[str, Any]], operator.add]
+
+    # 2.5 Citations (Aggregated)
+    citations: Annotated[List[Citation], operator.add]
 
     # 3. Flow Control
     next_step: Optional[List[str]]

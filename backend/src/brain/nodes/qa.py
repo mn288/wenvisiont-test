@@ -20,10 +20,12 @@ async def qa_node(state: GraphState, config: RunnableConfig) -> dict:
 
     context = state.get("context", "")
     results = state.get("results", [])
+    citations = state.get("citations", [])
 
-    # Aggregate specific details
-    # Aggregate specific details
+    # Aggregate specific details & Citations
     full_context = context + "\n\nDetailed Results:\n"
+
+    # 1. Summarize Results
     for r in results:
         # Expect r to be a dict (serialized AgentResult)
         agent = r.get("assigned_to", "Unknown Agent")
@@ -33,6 +35,20 @@ async def qa_node(state: GraphState, config: RunnableConfig) -> dict:
         artifact_note = f" (Produced {len(artifacts)} artifacts)" if artifacts else ""
 
         full_context += f"\n### Result from {agent}{artifact_note}:\n{summary}\n"
+
+    # 2. Append Citations (for LLM awareness)
+    if citations:
+        full_context += "\n\n### SOURCES / CITATIONS:\n"
+        # Deduplicate by URI
+        unique_citations = {c.get("uri"): c for c in citations if isinstance(c, dict)}.values()
+
+        for i, c in enumerate(unique_citations, 1):
+            title = c.get("title", "Unknown Source")
+            uri = c.get("uri", "N/A")
+            snippet = c.get("snippet", "")
+            full_context += f"[{i}] {title} ({uri})\n"
+            if snippet:
+                full_context += f"    Snippet: {snippet[:200]}...\n"
 
     prompt = QA_AGGREGATION_PROMPT.format(input_request=state["input_request"], full_context=full_context)
 

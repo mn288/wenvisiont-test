@@ -136,6 +136,7 @@ async def seed_mcp_servers():
             print("SEEDER: 'analysis-mcp' MCP server created successfully.")
     except Exception as e:
         print(f"SEEDER: Failed to seed Analysis MCP: {e}")
+    # 5. GCP RAG SERVER
     try:
         existing_rag = await mcp_service.get_servers_by_names(["gcp-rag"])
         if not existing_rag:
@@ -146,10 +147,10 @@ async def seed_mcp_servers():
 
             python_exe = sys.executable
             # Relative to /app/backend or cwd
-            script_path = os.path.abspath("src/tools/rag.py")
+            script_path = os.path.abspath("src/mcp/rag.py")
             if not os.path.exists(script_path):
                 # Try relative to this file?
-                script_path = "/app/backend/src/tools/rag.py"
+                script_path = "/app/backend/src/mcp/rag.py"
 
             server_payload_rag = MCPServerCreate(name="gcp-rag", type="stdio", command=python_exe, args=[script_path])
 
@@ -167,9 +168,9 @@ async def seed_mcp_servers():
             import sys
 
             python_exe = sys.executable
-            script_path = os.path.abspath("src/tools/bigquery.py")
+            script_path = os.path.abspath("src/mcp/bigquery.py")
             if not os.path.exists(script_path):
-                script_path = "/app/backend/src/tools/bigquery.py"
+                script_path = "/app/backend/src/mcp/bigquery.py"
 
             server_payload_bq = MCPServerCreate(
                 name="gcp-bigquery", type="stdio", command=python_exe, args=[script_path]

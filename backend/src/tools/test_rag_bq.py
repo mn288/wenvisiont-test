@@ -14,12 +14,25 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from tools.adapter import MCPAdapter
 
 try:
-    from tools.bigquery import mcp as bq_mcp
-    from tools.rag import mcp as rag_mcp
+    from mcp.bigquery import mcp as bq_mcp
+    from mcp.rag import mcp as rag_mcp
 except ImportError:
-    # Fallback for direct execution
-    from tools.bigquery import mcp as bq_mcp
-    from tools.rag import mcp as rag_mcp
+    # Fallback for direct execution if path issues
+    # But since we added ../.. to path, mcp should be found under 'src' -> 'mcp'
+    # Wait, 'src' is not a package usually unless __init__.py exists.
+    # But imports in this project seem to use `services.xx` which implies `backend/src` IS in path.
+    # So `from mcp import ...` should work if `backend/src/mcp` is valid and `backend/src` is in path.
+    try:
+        from src.mcp.bigquery import mcp as bq_mcp
+        from src.mcp.rag import mcp as rag_mcp
+    except ImportError:
+        # Last resort for local run relative to file
+        sys.path.append(os.path.join(os.path.dirname(__file__), "../mcp"))
+        import bigquery as bq_module
+        import rag as rag_module
+
+        bq_mcp = bq_module.mcp
+        rag_mcp = rag_module.mcp
 
 
 async def test_gcp_tools():
