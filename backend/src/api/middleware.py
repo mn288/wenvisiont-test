@@ -12,33 +12,46 @@ user_id_context = contextvars.ContextVar("user_id_context", default=None)
 
 class TenantMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # 1. Extract Tenant ID
-        tenant_id = request.headers.get("X-Tenant-ID")
+        # 1. Identity Source of Truth: request.state.user (from Auth Middleware)
+        # If not present (e.g. public endpoint), we drift to defaults or anonymous
+        user_identity = getattr(request.state, "user", {})
 
-        # 2. Development Fallback (Optional, can be removed in Prod)
+        # 2. Extract Tenant ID
+        # Prefer Identity Tenant > Header > Default
+        tenant_id = user_identity.get("tenant_id") or request.headers.get("X-Tenant-ID")
+
+        # Development Fallback
         if not tenant_id:
-            # Check if we are in a dev environment or if strict mode is disabled
-            # For now, we default to 'default-tenant' to not break existing calls
-            # In a real strict mode, we would return 403 here.
             tenant_id = "default-tenant"
 
         # 3. Set Context
-        # We store just the ID for now, but could store a full model
         token = tenant_context.set(tenant_id)
 
         # 3.1 Extract Role
-        # For local development/industrialization phase, we default to ADMIN (Superadmin)
-        user_role = request.headers.get("X-Role", "ADMIN").upper()
+        # Prefer Identity Role > Header > Default
+        # user_identity["roles"] might be a list or single string
+        # 3.1 Extract Role
+        roles = user_identity.get("roles")
+        user_role = None
+
+        if roles:
+            if isinstance(roles, list):
+                user_role = roles[0] if roles else None
+            else:
+                user_role = str(roles)
+
+        if not user_role:
+            user_role = request.headers.get("X-Role", "VIEWER")
+
+        # Normalize
+        user_role = user_role.upper()
         role_token = role_context.set(user_role)
 
-        # 3.2 Extract User ID (New for Observability)
-        # Prioritize Header (X-User-ID) > Query Param (user_id) > Anonymous
-        user_id = request.headers.get("X-User-ID")
+        # 3.2 Extract User ID
+        user_id = user_identity.get("sub") or user_identity.get("user_id") or request.headers.get("X-User-ID")
+
         if not user_id:
-            user_id = request.query_params.get("user_id")
-        
-        if not user_id:
-            user_id = "anonymous-user"
+            user_id = request.query_params.get("user_id") or "anonymous-user"
 
         user_id_token = user_id_context.set(user_id)
 

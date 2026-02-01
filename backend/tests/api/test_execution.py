@@ -61,7 +61,9 @@ async def test_create_job_success(client: AsyncClient, mock_db_cursor, mock_user
 async def test_create_job_invalid_role(client: AsyncClient):
     # Missing headers -> defaults to USER which is valid.
     # We explicitly send INVALID role to fail.
-    response = await client.post("/jobs?input_request=test", headers={"X-Role": "INVALID"})
+    response = await client.post(
+        "/jobs?input_request=test", headers={"X-Role": "INVALID", "X-User-ID": "test", "X-Tenant-ID": "t"}
+    )
     expect(response.status_code).to(equal(403))
 
 

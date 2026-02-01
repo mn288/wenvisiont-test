@@ -2,9 +2,11 @@ import asyncio  # Lazy import or move to top
 import logging
 from typing import Any, Dict, List
 
+import openai
 from crewai.llms.base_llm import BaseLLM
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +106,7 @@ class QwenLLM(BaseLLM):
         # Pass callbacks in config to ensure LangFuse/others catch it.
         # This might duplicate events if context is already active, but for CrewAI (often isolated) it is safer.
         stream_config = {"callbacks": active_callbacks} if active_callbacks else None
-        
+
         for chunk in client.stream(lc_messages, config=stream_config, **kwargs):
             response_content += chunk.content
 
@@ -134,7 +136,7 @@ class QwenLLM(BaseLLM):
 
         # Merge callbacks
         active_callbacks = self._merge_callbacks(callbacks)
-        
+
         # DEBUG: Observability Check
         if active_callbacks:
             callback_names = [cb.__class__.__name__ for cb in active_callbacks]
@@ -196,19 +198,31 @@ class QwenLLM(BaseLLM):
                 kwargs.pop(invalid_arg)
 
         response_content = ""
-        
+
+        stream_config = {"callbacks": active_callbacks} if active_callbacks else None
+
         stream_config = {"callbacks": active_callbacks} if active_callbacks else None
 
         try:
-            async for chunk in client.astream(lc_messages, config=stream_config, **kwargs):
-                # Explicitly check for cancellation to ensure we stop generating
-                if asyncio.current_task().cancelled():
-                    logger.warning("QwenLLM: Task cancelled during generation loop.")
-                    raise asyncio.CancelledError("Task cancelled during generation loop.")
-                
-                response_content += chunk.content
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type((openai.APIConnectionError, openai.Timeout, openai.RateLimitError)),
+                reraise=True,
+            ):
+                with attempt:
+                    async for chunk in client.astream(lc_messages, config=stream_config, **kwargs):
+                        # Explicitly check for cancellation to ensure we stop generating
+                        if asyncio.current_task().cancelled():
+                            logger.warning("QwenLLM: Task cancelled during generation loop.")
+                            raise asyncio.CancelledError("Task cancelled during generation loop.")
+
+                        response_content += chunk.content
         except asyncio.CancelledError:
             logger.warning("QwenLLM: Generation cancelled.")
+            raise
+        except Exception as e:
+            logger.error(f"QwenLLM: Failed to generate response after retries: {e}")
             raise
 
         return response_content
@@ -218,4 +232,3 @@ class QwenLLM(BaseLLM):
 
     def supports_stop_words(self) -> bool:
         return True
-

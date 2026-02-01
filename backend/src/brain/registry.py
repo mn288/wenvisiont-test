@@ -4,6 +4,7 @@ from uuid import uuid4
 # CrewAI Imports
 from crewai import Agent, Task
 
+from brain.logger import app_logger
 from brain.prompts import (
     DEFAULT_CONTEXT_TEMPLATE,
     DYNAMIC_AGENT_BACKSTORY,
@@ -38,7 +39,7 @@ class AgentRegistry:
 
     async def load_agents(self):
         """Load all agents from the database into the cache."""
-        print("Loading agents from Database...")
+        app_logger.info("Loading agents from Database...")
         self._agents = {}
         try:
             async with pool.connection() as conn:
@@ -50,17 +51,17 @@ class AgentRegistry:
                         try:
                             node_config = NodeConfig(**config_data)
                             self._agents[node_config.name] = node_config
-                            print(f"Loaded agent node: {node_config.name}")
+                            app_logger.info(f"Loaded agent node: {node_config.name}")
                         except Exception as e:
-                            print(f"Error parsing agent {name}: {e}")
+                            app_logger.error(f"Error parsing agent {name}: {e}")
         except Exception as e:
-            print(f"Error loading agents from DB: {e}")
+            app_logger.error(f"Error loading agents from DB: {e}")
 
         # ---------------------------------------------------------
         # Dynamic Loading: MCP Servers as Standalone Agents
         # ---------------------------------------------------------
         try:
-            print("Loading dynamic MCP agents...")
+            app_logger.info("Loading dynamic MCP agents...")
             from services.mcp import mcp_service
 
             servers = await mcp_service.get_all_servers()
@@ -70,7 +71,7 @@ class AgentRegistry:
                 agent_name = f"mcp_agent_{safe_name}"
 
                 if agent_name in self._agents:
-                    print(f"Skipping dynamic agent {agent_name} (Shadowed by DB agent)")
+                    app_logger.info(f"Skipping dynamic agent {agent_name} (Shadowed by DB agent)")
                     continue
 
                 # Construct Dynamic Config via Adapter
@@ -85,14 +86,11 @@ class AgentRegistry:
                         tool_desc_list = [f"- {t.name}: {t.description}" for t in tools]
                         tool_summary = "\n".join(tool_desc_list)
                     else:
-                        print(f"Warning: Server {server.name} returned 0 tools. Skipping agent creation.")
+                        app_logger.warning(f"Warning: Server {server.name} returned 0 tools. Skipping agent creation.")
                         continue
 
                 except Exception as tool_err:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Removing '{agent_name}' from registry because tool loading failed: {tool_err}")
+                    app_logger.error(f"Removing '{agent_name}' from registry because tool loading failed: {tool_err}")
                     continue
 
                 # 1. Agent Config
@@ -126,10 +124,10 @@ class AgentRegistry:
                 )
 
                 self._agents[agent_name] = node_config
-                print(f"Loaded dynamic MCP agent: {agent_name} ({node_config.display_name})")
+                app_logger.info(f"Loaded dynamic MCP agent: {agent_name} ({node_config.display_name})")
 
         except Exception as e:
-            print(f"Error loading dynamic MCP agents: {e}")
+            app_logger.error(f"Error loading dynamic MCP agents: {e}")
 
         await self.load_workflows()
 
@@ -137,7 +135,7 @@ class AgentRegistry:
         """Load all workflows from the database into the cache."""
         from models.architect import GraphConfig
 
-        print("Loading workflows from Database...")
+        app_logger.info("Loading workflows from Database...")
         self._workflows = {}
         try:
             async with pool.connection() as conn:
@@ -149,17 +147,17 @@ class AgentRegistry:
                         try:
                             workflow_config = GraphConfig(**config_data)
                             self._workflows[workflow_config.name] = workflow_config
-                            print(f"Loaded workflow: {workflow_config.name}")
+                            app_logger.info(f"Loaded workflow: {workflow_config.name}")
 
                             if workflow_config.definitions:
                                 for agent_def in workflow_config.definitions:
                                     self._agents[agent_def.name] = agent_def
-                                    print(f"Loaded workflow-defined agent: {agent_def.name}")
+                                    app_logger.info(f"Loaded workflow-defined agent: {agent_def.name}")
 
                         except Exception as e:
-                            print(f"Error parsing workflow {name}: {e}")
+                            app_logger.error(f"Error parsing workflow {name}: {e}")
         except Exception as e:
-            print(f"Error loading workflows from DB: {e}")
+            app_logger.error(f"Error loading workflows from DB: {e}")
 
     async def save_agent(self, config: NodeConfig):
         """Save or update an agent in the database and cache."""
@@ -268,13 +266,13 @@ class AgentRegistry:
 
         # 2. File Access (Via MCP)
         if config.agent.files_access:
-            print(f"DEBUG: Agent {name} requires file access. Ensuring 'filesystem' MCP is loaded.")
+            app_logger.debug(f"DEBUG: Agent {name} requires file access. Ensuring 'filesystem' MCP is loaded.")
             if "filesystem" not in config.agent.mcp_servers:
                 config.agent.mcp_servers.append("filesystem")
 
         # 3. S3 Access (Via MCP)
         if config.agent.s3_access:
-            print(f"DEBUG: Agent {name} requires S3 access. Ensuring 's3' MCP is loaded.")
+            app_logger.debug(f"DEBUG: Agent {name} requires S3 access. Ensuring 's3' MCP is loaded.")
             if "s3" not in config.agent.mcp_servers:
                 config.agent.mcp_servers.append("s3")
 
@@ -295,17 +293,17 @@ class AgentRegistry:
                     mcp_tools = await adapter.get_tools()
                     agent_tools.extend(mcp_tools)
                 except Exception as e:
-                    print(f"CRITICAL: Failed to load tools for agent {name} at runtime: {e}")
+                    app_logger.critical(f"CRITICAL: Failed to load tools for agent {name} at runtime: {e}")
                     # Do not raise hard error, allow agent to start without broken tools (or decide policy)
                     # raise RuntimeError(f"Agent {name} failed initialization: MCP Connection Error: {e}")
-                    print("Continuing without some tools...")
+                    app_logger.warning("Continuing without some tools...")
 
             if config.agent.mcp_servers and not mcp_tools and not agent_tools:
-                print(
+                app_logger.warning(
                     f"WARNING: Agent {name} requested MCP servers {config.agent.mcp_servers} but no tools were loaded."
                 )
 
-        print(f"DEBUG: Creating agent {name} with tools: {[t.name for t in agent_tools]}")
+        app_logger.debug(f"DEBUG: Creating agent {name} with tools: {[t.name for t in agent_tools]}")
 
         # Instantiate LLM with callbacks if provided
         agent_llm = get_llm(callbacks) if callbacks else llm

@@ -18,7 +18,6 @@ from brain.logger import LogHandler
 from brain.nodes.supervisor import supervisor_node
 from brain.prompts import REFLECTION_PROMPT
 from brain.registry import AgentRegistry
-from core.database import pool
 from crew.agents import llm
 from models.state import AgentResult, AgentTask, GraphState
 from services.crew_service import CrewService
@@ -37,7 +36,7 @@ infrastructure_service = InfrastructureService()
 
 async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_name: str) -> dict:
     """Execute a generic agent using CrewService."""
-    logger = LogHandler(pool)
+    logger = LogHandler()
     thread_id = config["configurable"]["thread_id"]
     user_id = config["configurable"].get("user_id")
     checkpoint_id = config["configurable"].get("checkpoint_id")
@@ -337,7 +336,7 @@ async def execute_workflow_node(state: GraphState, config: RunnableConfig, workf
     Execute a Superagent Team (Workflow) as a subgraph.
     Dynamic recursive execution.
     """
-    logger = LogHandler(pool)
+    logger = LogHandler()
     thread_id = config["configurable"]["thread_id"]
     checkpoint_id = config["configurable"].get("checkpoint_id")
 

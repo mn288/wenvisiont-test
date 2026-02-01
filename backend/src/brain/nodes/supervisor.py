@@ -6,7 +6,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command, Send
 
 from brain.logger import LogHandler
-from core.database import pool
 from models.state import AgentTask, GraphState
 from services.orchestrator import OrchestratorService
 from utils.pii import masker
@@ -17,7 +16,7 @@ orchestrator_service = OrchestratorService()
 
 async def preprocess_node(state: GraphState, config: RunnableConfig) -> dict:
     """Validate input and initialize Hybrid Context State."""
-    logger = LogHandler(pool)
+    logger = LogHandler()
     thread_id = config["configurable"]["thread_id"]
     checkpoint_id = config["configurable"].get("checkpoint_id")
 
@@ -54,7 +53,7 @@ async def supervisor_node(
     state: GraphState, config: RunnableConfig, allowed_node_names: list[str] | None = None
 ) -> Command:
     """Decide next steps using OrchestratorService and Hybrid Context."""
-    logger = LogHandler(pool)
+    logger = LogHandler()
     thread_id = config["configurable"]["thread_id"]
     user_id = config["configurable"].get("user_id")
     checkpoint_id = config["configurable"].get("checkpoint_id")

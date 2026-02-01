@@ -1,9 +1,23 @@
+from enum import Enum
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class Environment(str, Enum):
+    DEV = "DEV"
+    STAGING = "STAGING"
+    PROD = "PROD"
+
+
 class Settings(BaseSettings):
+    # =========================================================================
+    # Application Config
+    # =========================================================================
+    ENV: Environment = Environment.DEV
+    LOG_LEVEL: str = "INFO"
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+
     # =========================================================================
     # Database Configuration
     # =========================================================================
@@ -84,6 +98,10 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    @property
+    def is_prod(self) -> bool:
+        return self.ENV == Environment.PROD
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
