@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>agent_flow_technical_guide.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="agentic-orchestrator-swarm-architecture">Agentic Orchestrator Swarm Architecture</h1>
+<p>This document details the technical implementation of the Agentic Orchestrator Swarm flow. It is designed to provide a comprehensive understanding of the entire lifecycle of an agentic request, from the initial prompt to the final state transition.</p>
+<h2 id="1-high-level-overview">1. High-Level Overview</h2>
+<p>The system implements a <strong>Plan-and-Execute</strong> architecture using a star-graph orchestrator pattern. A central <strong>Supervisor</strong> (Orchestrator) manages the state and routes tasks to specialized <strong>Agents</strong> (or Sub-Swarms).</p>
+<p>Key characteristics:</p>
+<ul>
+<li><strong>Orchestration</strong>: Centralized decision-making via a Supervisor.</li>
+<li><strong>Dynamic Plans</strong>: The Plan is mutable and evolves as agents return results.</li>
+<li><strong>One Agent, One Tool Pattern</strong>: Each MCP Server is dynamically exposed as a specialized agent to the orchestrator.</li>
+<li><strong>Self-Correction</strong>: Agents implement a &quot;Tri-State Reflection&quot; loop to self-heal output before returning it to the supervisor.</li>
+<li><strong>Memory</strong>: &quot;Voyager-style&quot; skill retrieval allows agents to learn from past successful executions.</li>
+</ul>
+<hr>
+<h2 id="2-state-management-graphstate">2. State Management (<code>GraphState</code>)</h2>
+<p>The &quot;Brain&quot; of the system is the <code>GraphState</code>, a typed dictionary that persists throughout the graph execution.</p>
+<h3 id="schema-srcmodelsstatepy">Schema (<code>src/models/state.py</code>)</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">GraphState</span><span class="hljs-params">(TypedDict)</span>:</span>
+    input_request: str                        <span class="hljs-comment"># The original user intent</span>
+    messages: Annotated[List[Any], operator.add] <span class="hljs-comment"># Append-only chat history</span>
+    tasks: Annotated[List[Dict], operator.add]   <span class="hljs-comment"># Log of all tasks created</span>
+    results: Annotated[List[Dict], operator.add] <span class="hljs-comment"># Log of all agent outputs</span>
+    plan: Annotated[List[str], <span class="hljs-keyword">lambda</span> x, y: y]   <span class="hljs-comment"># The current active plan (overwritten)</span>
+    global_state: Annotated[Dict, merge_dict]    <span class="hljs-comment"># Shared context/knowledge</span>
+    citations: Annotated[List[Citation], operator.add] <span class="hljs-comment"># Source tracking</span>
+    next_step: Optional[List[str]]               <span class="hljs-comment"># Routing destination</span>
+</div></code></pre>
+<h3 id="key-concepts">Key Concepts</h3>
+<ul>
+<li><strong>Reducers (<code>operator.add</code>)</strong>: Fields like <code>messages</code> and <code>results</code> are append-only. The system never &quot;forgets&quot; events, ensuring full traceability.</li>
+<li><strong>Global State</strong>: A shared blackboard (<code>global_state</code>) allows agents to pass structured data (like file paths or partial answers) without clogging the chat context.</li>
+</ul>
+<hr>
+<h2 id="3-the-core-graph-pattern-supervisor-star">3. The Core Graph Pattern (Supervisor-Star)</h2>
+<p>The architecture uses a <strong>Star Graph</strong> where the Supervisor sits in the center. All agents return to the Supervisor, which then decides the next move.</p>
+<h3 id="flow-logic-srcbraingraphpy">Flow Logic (<code>src/brain/graph.py</code>)</h3>
+<ol>
+<li><strong>Preprocess</strong>: Validates input and initializes state.</li>
+<li><strong>Supervisor</strong>: Analyzes state -&gt; Updates Plan -&gt; Routes to Agent.</li>
+<li><strong>Agent Execution</strong>: Agent performs task -&gt; Returns Result -&gt; Back to Supervisor.</li>
+<li><strong>QA</strong>: Consolidates final answer -&gt; END.</li>
+</ol>
+<h3 id="mermaid-diagram-orchestration-flow">Mermaid Diagram: Orchestration Flow</h3>
+<pre><code class="language-mermaid"><div class="mermaid">graph TD
+    User([User Request]) --> Preprocess
+    Preprocess --> Supervisor{Supervisor Agent}
+
+    subgraph Swarm [Agent Swarm]
+        Supervisor --Route--> AgentA[Researcher Agent]
+        Supervisor --Route--> AgentB[Coder Agent]
+        Supervisor --Route--> AgentC[Reviewer Agent]
+        
+        AgentA --Result--> Supervisor
+        AgentB --Result--> Supervisor
+        AgentC --Result--> Supervisor
+    end
+
+    Supervisor --Success/Fail--> QA[QA & Synthesis]
+    QA --> End([Final Response])
+
+    %% Styling
+    style Supervisor fill:#f96,stroke:#333,stroke-width:2px,color:black
+    style QA fill:#9f9,stroke:#333,stroke-width:2px,color:black
+</div></code></pre>
+<hr>
+<h2 id="4-the-orchestrator-the-%22supervisor%22">4. The Orchestrator (The &quot;Supervisor&quot;)</h2>
+<p>The Supervisor is not just a router; it is a <strong>Planner</strong>. It uses the <code>Plan-and-Execute</code> pattern to break down complex requests.</p>
+<h3 id="techniques-used">Techniques Used</h3>
+<ol>
+<li>
+<p><strong>Orchestrator Prompt (<code>src/brain/prompts.py</code>)</strong>:</p>
+<ul>
+<li><strong>XML Context Tags</strong>: <code>&lt;session_history&gt;</code>, <code>&lt;current_plan&gt;</code>, <code>&lt;state_context&gt;</code> isolate input sections to prevent prompt injection and hallucinations.</li>
+<li><strong>JSON Enforcement</strong>: The LLM must return valid JSON containing the <code>thought_process</code>, <code>selected_agents</code>, and the updated <code>plan</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Circuit Breaker (<code>src/brain/nodes/supervisor.py</code>)</strong>:</p>
+<ul>
+<li>Prevents infinite loops.</li>
+<li><strong>Logic</strong>: If the Supervisor routes to the same agent twice in a row without state progression, the <code>retry_count</code> increments.</li>
+<li><strong>Trigger</strong>: If <code>retry_count &gt;= 2</code>, the system forces a route to <code>QA</code> to fail gracefully or ask for clarification.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="5-agent-execution-flow-the-%22worker%22">5. Agent Execution Flow (The &quot;Worker&quot;)</h2>
+<p>Agents are independent execution units. They do not know about the full graph; they simply receive a task and return a result.</p>
+<h3 id="the-execution-pipeline-srcbrainnodesexecutionpy">The Execution Pipeline (<code>src/brain/nodes/execution.py</code>)</h3>
+<ol>
+<li><strong>Task Retrieval</strong>: Fetches the specific <code>AgentTask</code> object assigned by the Supervisor.</li>
+<li><strong>Skill Retrieval (Voyager)</strong>:
+<ul>
+<li>Queries a vector DB for similar <em>past successful tasks</em>.</li>
+<li>Injects the <code>solution_code</code> of those past tasks into the context as &quot;Few-Shot Examples&quot;.</li>
+</ul>
+</li>
+<li><strong>Context Injection (Blindness Fix)</strong>:
+<ul>
+<li>Agents cannot see the entire chat history (to save tokens).</li>
+<li>We inject: <code>Available Artifacts</code> keys + <code>Last 5 Messages</code> + <code>Relevant Skills</code>.</li>
+</ul>
+</li>
+<li><strong>Execution &amp; Reflection (Self-Correction)</strong>:
+<ul>
+<li><strong>Execution</strong>: The agent generates an output (via Tool or LLM).</li>
+<li><strong>Reflection Loop</strong>: A separate LLM call critiques the output using the <code>REFLECTION_PROMPT</code>.</li>
+</ul>
+</li>
+</ol>
+<h3 id="the-tri-state-reflection-protocol">The Tri-State Reflection Protocol</h3>
+<p>The Reflector evaluates the output and returns one of three statuses:</p>
+<ul>
+<li><strong>APPROVED</strong>: Structure is perfect. -&gt; <em>Return result.</em></li>
+<li><strong>FIXED</strong>: Minor syntax error found. -&gt; <em>Auto-fix and return.</em></li>
+<li><strong>REJECTED</strong>: Major logic error. -&gt; <em>Send feedback to agent and RETRY loop.</em></li>
+</ul>
+<h3 id="mermaid-diagram-agent-execution-loop">Mermaid Diagram: Agent Execution Loop</h3>
+<pre><code class="language-mermaid"><div class="mermaid">graph TD
+    Start([Task Assignment]) --> Retrieve["Retrieve Skills (Voyager)"]
+    Retrieve --> Context[Build Context window]
+    Context --> Exec["Agent Execution (LLM/Tool)"]
+    
+    Exec --> Reflector{Reflection Check}
+    
+    Reflector --"APPROVED"--> Success
+    Reflector --"FIXED (Auto)"--> Update[Update Output] --> Success
+    Reflector --"REJECTED"--> Feedback[Generate Feedback]
+    Feedback --> Exec
+    
+    Success([Save Result & Skill]) --> Return_Supervisor
+    
+    %% Styling
+    style Reflector fill:#ff9,stroke:#333,stroke-width:2px,color:black
+    style Exec fill:#9cf,stroke:#333,stroke-width:2px,color:black
+</div></code></pre>
+<hr>
+<h2 id="6-prompt-engineering-techniques">6. Prompt Engineering Techniques</h2>
+<p>All prompts in <code>src/brain/prompts.py</code> follow &quot;Agentic Best Practices v2.0&quot;.</p>
+<h3 id="1-xml-context-tagging">1. XML Context Tagging</h3>
+<p>We wrap all dynamic inputs in XML tags. This helps the LLM distinguish between &quot;Instructions&quot; and &quot;Data&quot;.</p>
+<pre class="hljs"><code><div>### GLOBAL CONTEXT
+&lt;user_request&gt;
+{request}
+&lt;/user_request&gt;
+
+&lt;state_context&gt;
+{state_json}
+&lt;/state_context&gt;
+</div></code></pre>
+<h3 id="2-role-based-specialized-personas">2. Role-Based Specialized Personas</h3>
+<p>Agents are not &quot;Helpful Assistants&quot;. They are &quot;Specialized Processes&quot;.</p>
+<ul>
+<li><strong>Example</strong>: &quot;You are a function-calling engine. You do not talk; you execute.&quot;</li>
+<li><strong>Why</strong>: Drastically reduces &quot;chattiness&quot; and increases tool usage reliability.</li>
+</ul>
+<h3 id="3-programmatic-output-json-mode">3. Programmatic Output (JSON Mode)</h3>
+<p>Crucial for the Orchestrator and Reflector. We do not parse Natural Language for routing. We parse JSON.</p>
+<ul>
+<li><strong>Orchestrator</strong>: Returns <code>{ &quot;selected_agents&quot;: [&quot;...&quot;], &quot;plan&quot;: [...] }</code></li>
+<li><strong>Reflector</strong>: Returns <code>{ &quot;status&quot;: &quot;APPROVED&quot;, &quot;refined_output&quot;: &quot;...&quot; }</code></li>
+</ul>
+<hr>
+<h2 id="7-dynamic-mcp-agent-generation-the-one-agent-one-tool-pattern">7. Dynamic MCP Agent Generation (The One-Agent-One-Tool Pattern)</h2>
+<p>The system automatically scales its capabilities by mapping <strong>MCP Servers</strong> directly to <strong>Specialized Agents</strong>. This ensures that the Orchestrator works with atomic, single-responsibility units rather than overloaded generalists.</p>
+<h3 id="the-problem">The Problem</h3>
+<p>Traditional agents are often given 20+ tools. This confuses the LLM (Context Window saturation).</p>
+<h3 id="the-solution-1-mcp-server--1-specialized-agent">The Solution: 1 MCP Server = 1 Specialized Agent</h3>
+<p>When the system starts (or when <code>registry.reload()</code> is called):</p>
+<ol>
+<li><strong>Scanning</strong>: The <code>AgentRegistry</code> queries the <strong>MCP Service</strong> for all active servers (e.g., <code>filesystem</code>, <code>s3</code>, <code>google-maps</code>).</li>
+<li><strong>Wrappers</strong>: For each server found, the registry dynamically generates an Agent Configuration.</li>
+<li><strong>Specialization Prompts</strong>: A strict prompt template (<code>DYNAMIC_AGENT_BACKSTORY</code>) is used to force the agent to ignore general knowledge and <strong>ONLY</strong> use the provided toolset.</li>
+</ol>
+<h3 id="code-logic-srcbrainregistrypy">Code Logic (<code>src/brain/registry.py</code>)</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># Pseudo-logic flow</span>
+servers = mcp_service.get_all_servers()
+<span class="hljs-keyword">for</span> server <span class="hljs-keyword">in</span> servers:
+    <span class="hljs-comment"># 1. Create unique name</span>
+    agent_name = <span class="hljs-string">f"mcp_agent_<span class="hljs-subst">{server.name}</span>"</span>
+    
+    <span class="hljs-comment"># 2. Bind ONLY this server</span>
+    agent_config = AgentConfig(
+        role=<span class="hljs-string">"{server.name} Specialist"</span>,
+        goal=<span class="hljs-string">"You are a function-calling engine. You do not talk; you execute."</span>,
+        mcp_servers=[server.name], <span class="hljs-comment"># &lt;-- The key constraint</span>
+    )
+    
+    <span class="hljs-comment"># 3. Register as Node</span>
+    registry.register(agent_name, agent_config)
+</div></code></pre>
+<h3 id="resulting-architecture">Resulting Architecture</h3>
+<p>The Supervisor sees a menu of highly specialized tools masquerading as agents:</p>
+<ul>
+<li><code>mcp_agent_filesystem</code> -&gt; &quot;I can read/write files.&quot;</li>
+<li><code>mcp_agent_math</code> -&gt; &quot;I can calculate things.&quot;</li>
+<li><code>mcp_agent_s3</code> -&gt; &quot;I can upload/download blobs.&quot;</li>
+</ul>
+<p>This drastically improves routing accuracy because the Supervisor (Planner) assigns the task to the <strong>Agent</strong> (which is just a wrapper for the toolset), and the Agent (Worker) has no other distraction but to call that tool.</p>
+<hr>
+<h2 id="8-the-architect-service-meta-agent">8. The Architect Service (Meta-Agent)</h2>
+<p>The <strong>Architect</strong> is a specialized service that acts as a &quot;Agent Generator&quot;. It allows the user to ask for a custom workflow, and the system will design, compile, and register it on the fly.</p>
+<h3 id="the-%22saas-in-a-box%22-pattern">The &quot;SaaS in a Box&quot; Pattern</h3>
+<p>When a user asks: <em>&quot;Build me a team that research stocks and writes a Python report&quot;</em>, the Architect Service takes over:</p>
+<ol>
+<li>
+<p><strong>Decomposition Prompt (<code>ARCHITECT_PROMPT</code>)</strong>:</p>
+<ul>
+<li>Input: User Goal + List of Available MCP Tools (e.g. <code>yahoo_finance</code>, <code>code_interpreter</code>).</li>
+<li>Output: A JSON Schema defining a <strong>New Supervisor-Star Graph</strong>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Schema Validation</strong>:</p>
+<ul>
+<li>The Architect ensures strict &quot;Single Purpose&quot; agents.</li>
+<li>It creates a <code>StockResearcher</code> agent (bound to <code>yahoo_finance</code> tool) and a <code>ReportWriter</code> agent (bound to <code>file_writer</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Recursive Registration</strong>:</p>
+<ul>
+<li>The new Graph is saved to the <code>workflows</code> table.</li>
+<li><strong>Hot Reload</strong>: The system hot-reloads the <code>AgentRegistry</code>.</li>
+<li><strong>Recursive Usage</strong>: The <em>Main Supervisor</em> now sees this new Team as a single &quot;Node&quot; called <code>stock_report_team</code>.</li>
+</ul>
+</li>
+</ol>
+<h3 id="mermaid-recursive-composition">Mermaid: Recursive Composition</h3>
+<pre><code class="language-mermaid"><div class="mermaid">graph TD
+    User --> MainSuper{Main Supervisor}
+    MainSuper --> Architect[Architect Service]
+    Architect --Creates--> NewTeam[("New Sub-Graph")]
+    
+    subgraph NewTeam
+        SubSuper{Sub-Supervisor} --> AgentA
+        SubSuper{Sub-Supervisor} --> AgentB
+    end
+    
+    NewTeam -.-> MainSuper
+    %% The Main Supervisor can now route to the New Team
+</div></code></pre>
+<hr>
+<h2 id="9-observability--tracing-langfuse">9. Observability &amp; Tracing (LangFuse)</h2>
+<p>The system is instrumented with <strong>LangFuse</strong> to provide &quot;X-Ray Vision&quot; into the Graph execution.</p>
+<h3 id="implementation-srccoreobservabilitypy">Implementation (<code>src/core/observability.py</code>)</h3>
+<p>We use a custom <code>AntigravityCallbackHandler</code> that injects metadata into every LLM call.</p>
+<h3 id="key-metrics-tracked">Key Metrics Tracked</h3>
+<ul>
+<li><strong>Trace ID</strong>: Maps 1:1 with the User's <code>Thread ID</code>.</li>
+<li><strong>Session ID</strong>: Stateless sessions mapped deterministically from Trace IDs.</li>
+<li><strong>Tags</strong>:
+<ul>
+<li><code>agent_name</code>: Which agent performed the action.</li>
+<li><code>reflection_status</code>: Did the agent pass/fail reflection?</li>
+<li><code>tool_usage</code>: Which MCP tools were called.</li>
+</ul>
+</li>
+</ul>
+<h3 id="the-%22full-trace%22-view">The &quot;Full Trace&quot; View</h3>
+<p>Every step is visible in the LangFuse UI:</p>
+<ol>
+<li><strong>Graph Transition</strong>: Supervisor -&gt; Agent A.</li>
+<li><strong>Agent Thought</strong>: &quot;I need to look for files...&quot;</li>
+<li><strong>MCP Tool Call</strong>: <code>filesystem.list_dir(&quot;/src&quot;)</code></li>
+<li><strong>Tool Output</strong>: <code>[&quot;file1.py&quot;, &quot;file2.py&quot;]</code></li>
+<li><strong>Reflection Step</strong>: &quot;Output looks good.&quot;</li>
+</ol>
+<p>This granularity allows us to debug <em>why</em> a Plan failed (e.g., &quot;The tool returned an error, but the agent ignored it&quot;).</p>
+
+</body>
+</html>

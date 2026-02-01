@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: antigravity-backend
+  labels:
+    app: antigravity-backend
+spec:
+  selector:
+    app: antigravity-backend
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP

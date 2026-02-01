@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: antigravity-backend
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: backend
+        env:
+        - name: ENV
+          value: "DEV"
