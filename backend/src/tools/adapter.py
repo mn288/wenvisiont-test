@@ -265,7 +265,7 @@ class MCPAdapter:
                 server_name = getattr(server_conf, "name", "unknown")
 
                 # Determine how to connect based on type
-                client_context = self._get_client(server_conf)
+                client_context = self._create_client(server_conf)
 
                 async with client_context as client:
                     mcp_tools = await client.list_tools()

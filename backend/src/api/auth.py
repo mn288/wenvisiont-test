@@ -131,6 +131,11 @@ class MockOIDCMiddleware(BaseHTTPMiddleware):
         if request.url.path in PUBLIC_PATHS:
             return await call_next(request)
 
+        # If X-Role header is explicitly provided, skip mock injection
+        # This allows tests to control roles via headers
+        if request.headers.get("X-Role"):
+            return await call_next(request)
+
         # Inject Mock User if not present
         if not hasattr(request.state, "user"):
             request.state.user = {

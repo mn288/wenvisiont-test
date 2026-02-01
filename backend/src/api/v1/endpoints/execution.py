@@ -99,12 +99,13 @@ async def invoke(
     background_tasks: BackgroundTasks = None,
     thread_id: str = "default",
     role: str = Depends(get_current_role),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Deprecated: Use POST /jobs instead.
     """
     return await create_job(
-        input_request=input_request, background_tasks=background_tasks, thread_id=thread_id, role=role
+        input_request=input_request, background_tasks=background_tasks, thread_id=thread_id, role=role, user_id=user_id
     )
 
 
