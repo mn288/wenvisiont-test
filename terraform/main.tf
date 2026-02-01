@@ -12,6 +12,12 @@ module "networking" {
   depends_on = [module.apis]
 }
 
+module "iam" {
+  source                 = "./modules/iam"
+  project_id             = var.project_id
+  github_service_account = module.github_oidc.service_account_email
+}
+
 module "kms" {
   source     = "./modules/kms"
   project_id = var.project_id
@@ -72,24 +78,18 @@ module "vertex_ai" {
   depends_on = [module.networking, module.kms]
 }
 
-module "compute" {
-  source         = "./modules/compute"
-  project_id     = var.project_id
-  region         = var.region
-  vpc_name       = module.networking.vpc_name
-  subnet_name    = module.networking.subnet_name
-  backend_image  = "${module.artifact_registry.repository_url}/backend:latest"
-  frontend_image = "${module.artifact_registry.repository_url}/frontend:latest"
+module "gke_autopilot" {
+  source      = "./modules/gke_autopilot"
+  project_id  = var.project_id
+  region      = var.region
+  vpc_name    = module.networking.vpc_name
+  subnet_name = module.networking.subnet_name
 
-  # Construct Database URL with Redis and Vertex AI config if needed
-  # postgresql+asyncpg://user:password@ip:5432/dbname
-  database_url = "postgresql+asyncpg://${module.database.db_user}:${random_password.db_password.result}@${module.database.instance_ip_address}:5432/${module.database.db_name}"
-
-  depends_on = [module.database]
+  depends_on = [module.networking]
 }
 
 # -------------------------------------------------------------------------
-# Phase 3 Hardening: Cloud Armor WAF & Load Balancing
+# Phase 3 Hardening: Security & Ingress Support
 # -------------------------------------------------------------------------
 module "cloud_armor" {
   source     = "./modules/cloud_armor"
@@ -97,33 +97,15 @@ module "cloud_armor" {
 }
 
 module "load_balancer" {
-  source             = "./modules/load_balancer"
-  project_id         = var.project_id
-  region             = var.region
-  frontend_neg       = module.compute.frontend_neg_id
-  backend_neg        = module.compute.backend_neg_id
-  security_policy_id = module.cloud_armor.policy_id
-  domain_name        = var.domain_name
-  ssl_certificate_id = var.ssl_certificate_id
-
-  depends_on = [module.compute, module.cloud_armor]
+  source      = "./modules/load_balancer"
+  project_id  = var.project_id
+  domain_name = var.domain_name
 }
 
 # -------------------------------------------------------------------------
 # Phase 3 Hardening: Least-Privilege IAM Bindings
 # -------------------------------------------------------------------------
-module "iam" {
-  source                       = "./modules/iam"
-  project_id                   = var.project_id
-  backend_sa_email             = module.compute.backend_sa_email
-  frontend_sa_email            = module.compute.frontend_sa_email
-  backend_location             = var.region
-  backend_service_name         = "backend"
-  enable_authenticated_invoker = true
-  github_sa_email              = module.github_oidc.service_account_email
 
-  depends_on = [module.compute, module.github_oidc]
-}
 
 # -------------------------------------------------------------------------
 # CI/CD: Workload Identity Federation
@@ -166,21 +148,7 @@ module "cloud_tasks" {
   depends_on = [module.apis]
 }
 
-# -------------------------------------------------------------------------
-# Identity-Aware Proxy (IAP): Authentication with Identity Propagation
-# -------------------------------------------------------------------------
-module "iap" {
-  count = var.enable_iap ? 1 : 0
 
-  source             = "./modules/iap"
-  project_id         = var.project_id
-  project_number     = var.project_number
-  # support_email      = var.iap_support_email  # Removed: Manual configuration required
-  backend_service_id = module.load_balancer.backend_service_id
-  allowed_members    = var.iap_allowed_members
-
-  depends_on = [module.load_balancer]
-}
 
 # -------------------------------------------------------------------------
 # VPC Service Controls: Zero-Trust Perimeter (Optional)
@@ -215,8 +183,8 @@ module "vertex_rag_engine" {
 # OUTPUTS
 # =========================================================================
 
-output "load_balancer_ip" {
-  value = module.load_balancer.load_balancer_ip
+output "cluster_endpoint" {
+  value = module.gke_autopilot.cluster_endpoint
 }
 
 output "redis_host" {
@@ -263,4 +231,26 @@ output "dlp_inspect_template" {
 output "dlp_deidentify_template" {
   description = "DLP De-identify Template name for PII masking"
   value       = module.dlp.deidentify_template_name
+}
+
+# --- Ingress Resources ---
+
+output "ingress_static_ip_name" {
+  description = "Static IP Name for K8s Ingress annotation"
+  value       = module.load_balancer.ip_name
+}
+
+output "ingress_managed_cert_name" {
+  description = "Managed Cert Name for K8s Ingress annotation"
+  value       = module.load_balancer.certificate_name
+}
+
+output "security_policy_name" {
+  description = "Cloud Armor Policy Name for BackendConfig"
+  value       = module.cloud_armor.policy_name
+}
+
+output "workload_identity_sa" {
+  description = "GKE Workload Identity Service Account"
+  value       = module.iam.backend_sa_email
 }

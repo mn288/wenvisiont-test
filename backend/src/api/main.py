@@ -1,4 +1,3 @@
-import nest_asyncio
 from fastapi import FastAPI
 
 from api.v1.endpoints.agents import router as agents_router
@@ -15,8 +14,9 @@ from api.v1.endpoints.workflows import router as workflow_router
 from core.lifespan import lifespan
 from core.middleware import configure_middleware
 
-# Allow nested event loops for CrewAI sync tool wrappers
-nest_asyncio.apply()
+# NOTE: nest_asyncio is NOT applied here because uvicorn uses uvloop by default,
+# which is incompatible with nest_asyncio. The safe application is handled in
+# tools/adapter.py at runtime only when needed (and only for non-uvloop loops).
 
 app = FastAPI(title="LangGraph-CrewAI Bridge", lifespan=lifespan)
 

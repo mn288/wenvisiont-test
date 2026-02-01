@@ -13,9 +13,34 @@ except ImportError:
     MCPServerConfig = Any
 
 # Apply nest_asyncio to allow re-entrant event loops (Critical for FastAPI + CrewAI tools)
+# Note: nest_asyncio does NOT support uvloop, which uvicorn uses by default.
+# We defer application to runtime when a loop is available and it's not uvloop.
 import nest_asyncio
 
-nest_asyncio.apply()
+
+def _safe_apply_nest_asyncio(loop=None):
+    """
+    Safely apply nest_asyncio only if the loop is not uvloop.
+    uvloop is incompatible with nest_asyncio.
+    """
+    try:
+        if loop is None:
+            loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop, nothing to patch
+        return False
+
+    loop_type = type(loop).__name__
+    if "uvloop" in loop_type.lower():
+        # uvloop doesn't support nest_asyncio patching
+        return False
+
+    try:
+        nest_asyncio.apply(loop)
+        return True
+    except ValueError:
+        # Already patched or incompatible
+        return False
 
 
 def _json_schema_to_pydantic(name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
@@ -160,6 +185,8 @@ class MCPAdapter:
 
                             # Sync wrapper with SAFE execution
                             def _sync_tool_func(*args, _target=_tool_func, **kwargs):
+                                import concurrent.futures
+
                                 try:
                                     loop = asyncio.get_running_loop()
                                 except RuntimeError:
@@ -167,13 +194,18 @@ class MCPAdapter:
 
                                 if loop and loop.is_running():
                                     # We are in a running loop (FastAPI).
-                                    # Since we applied nest_asyncio, we can use run_until_complete OR asyncio.run()
-                                    # BUT asyncio.run() creates a NEW loop.
-                                    # It's safer to use the existing loop if allowed by nest_asyncio.
-                                    import nest_asyncio
-
-                                    nest_asyncio.apply(loop)
-                                    return loop.run_until_complete(_target(*args, **kwargs))
+                                    # Check if we can use nest_asyncio
+                                    loop_type = type(loop).__name__
+                                    if "uvloop" in loop_type.lower():
+                                        # uvloop doesn't support nest_asyncio
+                                        # Run in a new thread with its own event loop
+                                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                                            future = executor.submit(asyncio.run, _target(*args, **kwargs))
+                                            return future.result()
+                                    else:
+                                        # Standard loop - use nest_asyncio
+                                        _safe_apply_nest_asyncio(loop)
+                                        return loop.run_until_complete(_target(*args, **kwargs))
                                 else:
                                     return asyncio.run(_target(*args, **kwargs))
 

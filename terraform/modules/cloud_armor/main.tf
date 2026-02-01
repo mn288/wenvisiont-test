@@ -1,11 +1,12 @@
-
+variable "project_id" {
+  type = string
+}
 
 resource "google_compute_security_policy" "policy" {
-  name        = "${var.project_id}-security-policy"
-  description = "Cloud Armor security policy with OWASP rules"
+  name    = "antigravity-security-policy"
+  project = var.project_id
 
-  # Default Rule: Deny All (Best practice, allowlist approach) or Allow All depending on risk profile.
-  # For now, we allow all but filter attacks.
+  # Default rule: Allow all (to be hardened)
   rule {
     action   = "allow"
     priority = "2147483647"
@@ -15,46 +16,23 @@ resource "google_compute_security_policy" "policy" {
         src_ip_ranges = ["*"]
       }
     }
-    description = "Default rule, allow everything."
+    description = "Default rule, allow all"
   }
 
-  # OWASP Top 10 - SQL Injection
-  rule {
-    action   = "deny(403)"
-    priority = "1000"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
-      }
-    }
-    description = "SQL Injection Protection"
-  }
-
-  # OWASP Top 10 - XSS
-  rule {
-    action   = "deny(403)"
-    priority = "1001"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('xss-v33-stable')"
-      }
-    }
-    description = "XSS Protection"
-  }
-
-  # LFI/RFI
-  rule {
-    action   = "deny(403)"
-    priority = "1002"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('lfi-v33-stable') || evaluatePreconfiguredExpr('rfi-v33-stable')"
-      }
-    }
-    description = "LFI/RFI Protection"
-  }
+  # Example: Block specific IP (Placeholder)
+  # rule {
+  #   action   = "deny(403)"
+  #   priority = "1000"
+  #   match {
+  #     versioned_expr = "SRC_IPS_V1"
+  #     config {
+  #       src_ip_ranges = ["1.2.3.4/32"]
+  #     }
+  #   }
+  #   description = "Deny malicious IP"
+  # }
 }
 
-output "policy_id" {
-  value = google_compute_security_policy.policy.id
+output "policy_name" {
+  value = google_compute_security_policy.policy.name
 }

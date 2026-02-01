@@ -67,23 +67,8 @@ variable "access_policy_id" {
 
 # --- Identity-Aware Proxy (IAP) ---
 
-variable "enable_iap" {
-  description = "Enable Identity-Aware Proxy for authentication"
-  type        = bool
-  default     = false
-}
-
-variable "iap_support_email" {
-  description = "[DEPRECATED] Support email (unused: manual OAuth configuration required)"
-  type        = string
-  default     = ""
-}
-
-variable "iap_allowed_members" {
-  description = "List of members allowed IAP access (e.g., user:email@example.com, domain:example.com)"
-  type        = list(string)
-  default     = []
-}
+# IAP configuration is handled via Kubernetes Secrets (Client ID/Secret)
+# and BackendConfig. No Terraform resources needed.
 
 # --- VPC Service Controls ---
 

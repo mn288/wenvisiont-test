@@ -8,10 +8,24 @@ import orjson
 from models.infrastructure import InfrastructureConfig, S3Config
 
 
+def _get_default_workspace() -> str:
+    """
+    Get default workspace path.
+    - In Docker/K8s: WORKSPACE_ROOT env var is set, use that.
+    - Locally: Use .data/workspace relative to the backend directory.
+    """
+    if os.getenv("WORKSPACE_ROOT"):
+        return os.getenv("WORKSPACE_ROOT", "/app/data/workspace")
+
+    # Local development: create workspace in backend/.data/workspace
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(backend_dir, ".data", "workspace")
+
+
 class InfrastructureService:
-    # Persist workspace data - this path will be mounted as a Docker volume
-    # Maintain the same folder structure for each thread
-    BASE_WORKSPACE = os.getenv("WORKSPACE_ROOT", "/app/data/workspace")
+    # Persist workspace data - this path will be mounted as a Docker volume in prod
+    # For local dev, uses backend/.data/workspace
+    BASE_WORKSPACE = _get_default_workspace()
 
     def get_or_create_infrastructure(self, thread_id: str) -> InfrastructureConfig:
         """

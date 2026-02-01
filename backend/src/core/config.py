@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     CLOUD_TRACE_ENABLED: bool = False
 
     # =========================================================================
+    # Identity-Aware Proxy (IAP) Authentication
+    # =========================================================================
+    IAP_AUDIENCE: Optional[str] = None  # OAuth Client ID (auto-set by Google-managed client)
+    IAP_VERIFY_ENABLED: bool = True  # Set False for local dev without IAP
+
+    # =========================================================================
     # Computed Properties
     # =========================================================================
 

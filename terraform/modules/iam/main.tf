@@ -1,106 +1,37 @@
-# IAM Bindings for Least-Privilege Service Accounts
-# This module provides production-ready IAM bindings for Cloud Run services
+variable "project_id" {
+  type = string
+}
 
-# --- Backend Service Account Bindings ---
+variable "github_service_account" {
+  description = "Service Account for GitHub Actions OIDC"
+  type        = string
+}
 
-# Access Cloud SQL databases
-resource "google_project_iam_member" "backend_cloudsql_client" {
+# Backend Service Account (used by GKE Workload Identity)
+resource "google_service_account" "backend_sa" {
+  account_id   = "antigravity-backend-sa"
+  display_name = "Backend Workload Identity SA"
+  project      = var.project_id
+}
+
+# Allow K8s ServiceAccount to impersonate Google Service Account
+resource "google_service_account_iam_binding" "backend_wi" {
+  service_account_id = google_service_account.backend_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+
+  members = [
+    "serviceAccount:${var.project_id}.svc.id.goog[default/antigravity-backend-sa]"
+  ]
+}
+
+# Grant required permissions to Backend SA
+# (Example: Cloud SQL Client, Vertex AI User, Bedrock access etc.)
+resource "google_project_iam_member" "backend_sql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${var.backend_sa_email}"
+  member  = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
-# Access Secret Manager (for DB passwords, API keys)
-resource "google_project_iam_member" "backend_secretmanager_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${var.backend_sa_email}"
-}
-
-# Write logs to Cloud Logging
-resource "google_project_iam_member" "backend_logging_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${var.backend_sa_email}"
-}
-
-# Export metrics to Cloud Monitoring
-resource "google_project_iam_member" "backend_monitoring_writer" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${var.backend_sa_email}"
-}
-
-# Access GCS Buckets for file storage (if using GCS instead of S3)
-resource "google_project_iam_member" "backend_storage_object_admin" {
-  project = var.project_id
-  role    = "roles/storage.objectAdmin"
-  member  = "serviceAccount:${var.backend_sa_email}"
-}
-
-
-# --- Frontend Service Account Bindings ---
-
-# Read public assets from GCS if needed (optional)
-resource "google_project_iam_member" "frontend_storage_viewer" {
-  project = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${var.frontend_sa_email}"
-}
-
-# Write logs to Cloud Logging
-resource "google_project_iam_member" "frontend_logging_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${var.frontend_sa_email}"
-}
-
-
-# --- Cross-Service Invocation ---
-# Allow frontend to invoke backend (if using Cloud Run to Cloud Run auth)
-# This is an alternative to unauthenticated access.
-resource "google_cloud_run_service_iam_member" "frontend_can_invoke_backend" {
-  count    = var.enable_authenticated_invoker ? 1 : 0
-  location = var.backend_location
-  project  = var.project_id
-  service  = var.backend_service_name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${var.frontend_sa_email}"
-}
-
-# -------------------------------------------------------------------------
-# CI/CD: GitHub Actions Permissions
-# -------------------------------------------------------------------------
-variable "github_sa_email" {
-  description = "GitHub Actions Service Account Email"
-  type        = string
-  default     = "" # Optional if not using CI/CD
-}
-
-resource "google_project_iam_member" "github_secret_accessor" {
-  count   = var.github_sa_email != "" ? 1 : 0
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${var.github_sa_email}"
-}
-
-resource "google_project_iam_member" "github_run_admin" {
-  count   = var.github_sa_email != "" ? 1 : 0
-  project = var.project_id
-  role    = "roles/run.admin"
-  member  = "serviceAccount:${var.github_sa_email}"
-}
-
-resource "google_project_iam_member" "github_sa_user" {
-  count   = var.github_sa_email != "" ? 1 : 0
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${var.github_sa_email}"
-}
-
-resource "google_project_iam_member" "github_artifact_admin" {
-  count   = var.github_sa_email != "" ? 1 : 0
-  project = var.project_id
-  role    = "roles/artifactregistry.admin" # To push images
-  member  = "serviceAccount:${var.github_sa_email}"
+output "backend_sa_email" {
+  value = google_service_account.backend_sa.email
 }

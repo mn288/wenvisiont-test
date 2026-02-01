@@ -1,50 +1,142 @@
+"""
+Authentication Middleware for GCP Identity-Aware Proxy (IAP).
+
+This module provides:
+- IAPMiddleware: Production JWT validation for GCP IAP
+- MockOIDCMiddleware: Local development fallback with mock user
+
+The middleware automatically falls back to mock auth in DEV mode or when
+IAP_VERIFY_ENABLED is False, ensuring local development works without GCP.
+"""
+
+import logging
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
+from core.config import Environment, settings
 
-class OIDCMiddleware(BaseHTTPMiddleware):
+logger = logging.getLogger(__name__)
+
+# Public paths that bypass authentication
+PUBLIC_PATHS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc"}
+
+
+class IAPMiddleware(BaseHTTPMiddleware):
     """
-    Validates OIDC JWT Tokens.
-    In a real implementation, this would use PyJWT or similar to verify signature against JWKS.
-    For this Industrialization POC, we implement the structure but placeholder verification.
+    Validates GCP Identity-Aware Proxy JWT tokens.
+
+    The `x-goog-iap-jwt-assertion` header is injected by the GCP Load Balancer
+    when IAP is enabled. This middleware:
+    1. Extracts and verifies the JWT signature using Google's public keys
+    2. Extracts user identity (sub, email) and attaches to request.state.user
+    3. Returns 401 if validation fails in production
+
+    In DEV mode or when IAP_VERIFY_ENABLED=False, falls back to MockOIDCMiddleware.
     """
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._request = None  # Lazy-loaded Google Auth transport
+
+    def _get_google_request(self):
+        """Lazy-load Google Auth transport to avoid import errors in dev."""
+        if self._request is None:
+            from google.auth.transport import requests as google_requests
+
+            self._request = google_requests.Request()
+        return self._request
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # Skip Auth for Health Checks and Docs
-        if request.url.path in ["/health", "/docs", "/openapi.json"]:
+        # Skip auth for public paths
+        if request.url.path in PUBLIC_PATHS:
             return await call_next(request)
 
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            # In strict mode, we would raise 401.
-            # raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-            # For now, we log validation failure but might proceed if configured to allowing anonymous in specific cases
-            pass
+        # Check if IAP verification is enabled
+        if not settings.IAP_VERIFY_ENABLED or settings.ENV == Environment.DEV:
+            # Fallback to mock auth for local development
+            return await self._mock_dispatch(request, call_next)
 
-        # token = auth_header.split(" ")[1] if auth_header else None
+        # Get the IAP JWT assertion header
+        iap_jwt = request.headers.get("x-goog-iap-jwt-assertion")
 
-        # TODO: Implement Real JWT Validation
-        # try:
-        #     payload = jwt.decode(token, settings.OIDC_PUBLIC_KEY, algorithms=["RS256"], audience=settings.OIDC_AUDIENCE)
-        #     request.state.user = payload
-        # except Exception as e:
-        #      raise HTTPException(status_code=401, detail="Invalid Token")
+        if not iap_jwt:
+            logger.warning("Missing x-goog-iap-jwt-assertion header")
+            return Response(
+                content='{"detail": "Missing IAP authentication"}',
+                status_code=401,
+                media_type="application/json",
+            )
+
+        try:
+            # Verify the JWT using Google's library
+            from google.oauth2 import id_token
+
+            # Audience is the OAuth Client ID (auto-set by Google-managed client)
+            audience = settings.IAP_AUDIENCE
+            if not audience:
+                logger.error("IAP_AUDIENCE not configured")
+                return Response(
+                    content='{"detail": "IAP configuration error"}',
+                    status_code=500,
+                    media_type="application/json",
+                )
+
+            # Verify token and extract claims
+            claims = id_token.verify_token(iap_jwt, self._get_google_request(), audience=audience)
+
+            # Attach user info to request state
+            request.state.user = {
+                "sub": claims.get("sub"),
+                "email": claims.get("email"),
+                "hd": claims.get("hd"),  # Hosted domain (for org restriction)
+            }
+            logger.debug(f"IAP auth successful for user: {claims.get('email')}")
+
+        except ValueError as e:
+            logger.warning(f"IAP JWT validation failed: {e}")
+            return Response(
+                content='{"detail": "Invalid IAP token"}',
+                status_code=401,
+                media_type="application/json",
+            )
 
         return await call_next(request)
+
+    async def _mock_dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Inject mock user for local development."""
+        if not hasattr(request.state, "user"):
+            request.state.user = {
+                "sub": "mock-developer-id",
+                "email": "dev@wenvision.com",
+                "roles": ["ADMIN"],
+            }
+            logger.debug("Mock auth: Injected dev user")
+        return await call_next(request)
+
+
+# Alias for backward compatibility
+OIDCMiddleware = IAPMiddleware
 
 
 class MockOIDCMiddleware(BaseHTTPMiddleware):
     """
     Dev Middleware that injects a Mock User identity if no token provided.
+    Use this explicitly for local development or testing without IAP.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # Skip auth for public paths
+        if request.url.path in PUBLIC_PATHS:
+            return await call_next(request)
+
         # Inject Mock User if not present
-        if not request.headers.get("X-User-ID"):
-            # We treat this as a mutation of the request for downstream consumption
-            # But middleware request object is immutable-ish for headers.
-            # Standard pattern is using scope or state.
-            request.state.user = {"sub": "mock-developer-id", "email": "dev@wenvision.com", "roles": ["ADMIN"]}
+        if not hasattr(request.state, "user"):
+            request.state.user = {
+                "sub": "mock-developer-id",
+                "email": "dev@wenvision.com",
+                "roles": ["ADMIN"],
+            }
 
         return await call_next(request)

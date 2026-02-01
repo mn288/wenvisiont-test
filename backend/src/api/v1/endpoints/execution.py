@@ -7,6 +7,7 @@ from langgraph.types import Command
 
 from api.middleware import get_current_role, get_current_user_id
 from core.database import pool
+from core.observability import get_observability_callback
 from services.graph_service import GraphService
 
 router = APIRouter()
@@ -19,13 +20,13 @@ def _default_serializer(obj):
     if isinstance(obj, BaseMessage):
         return obj.dict()
     if isinstance(obj, (Command, Send)):
-         # Convert to dict representation
-         # Command has 'goto', 'update', etc.
-         # Send has 'node', 'arg'
-         try:
-             return obj.__dict__
-         except Exception:
-             return str(obj)
+        # Convert to dict representation
+        # Command has 'goto', 'update', etc.
+        # Send has 'node', 'arg'
+        try:
+            return obj.__dict__
+        except Exception:
+            return str(obj)
     if hasattr(obj, "model_dump") and callable(obj.model_dump):
         return obj.model_dump()
     if hasattr(obj, "dict") and callable(obj.dict):
@@ -41,7 +42,11 @@ async def run_bg_graph(thread_id: str, input_request: str, user_id: str):
     """Background task to run the graph."""
     try:
         graph = await GraphService.get_instance().get_graph()
-        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
+
+        # Inject Observability
+        callbacks = [get_observability_callback(trace_id=thread_id, user_id=user_id, trace_name=f"bg_job_{thread_id}")]
+
+        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}, "callbacks": callbacks}
         initial_state = {"input_request": input_request}
         await graph.ainvoke(initial_state, config=config)
     except Exception as e:
@@ -112,7 +117,15 @@ async def resume(
     """Resume execution after interrupt."""
     graph = await GraphService.get_instance().get_graph()
 
-    config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
+    # Inject Observability
+    callbacks = [
+        get_observability_callback(trace_id=thread_id, user_id=user_id, trace_name=f"graph_resume_{thread_id}")
+    ]
+
+    config = {
+        "configurable": {"thread_id": thread_id, "user_id": user_id},
+        "callbacks": callbacks,
+    }
 
     command = Command(resume=feedback) if feedback else None
 
@@ -134,7 +147,15 @@ async def stream(
     """
     graph = await GraphService.get_instance().get_graph()
 
-    config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
+    # Inject Observability
+    callbacks = [
+        get_observability_callback(trace_id=thread_id, user_id=user_id, trace_name=f"graph_stream_{thread_id}")
+    ]
+
+    config = {
+        "configurable": {"thread_id": thread_id, "user_id": user_id},
+        "callbacks": callbacks,
+    }
 
     if resume_feedback is not None:
         # Resuming
@@ -169,6 +190,7 @@ async def stream(
 
             # Optimization: Instantiate Registry ONCE
             from brain.registry import AgentRegistry
+
             registry = AgentRegistry()
             # Cache the valid node names
             dynamic_agents = [agent.name for agent in registry.get_all()]
@@ -191,11 +213,11 @@ async def stream(
                     if content:
                         metadata = event.get("metadata", {})
                         node = metadata.get("langgraph_node", "")
-                        
+
                         # Fallback if node is missing (often true for CrewAI internal chains)
                         # We try to infer from the last known active node if we are in a node execution context
                         # But strictly, we should just report what we have.
-                        
+
                         payload = orjson_dumps({"type": "token", "content": content, "node": node})
                         yield f"data: {payload}\n\n"
 
@@ -230,7 +252,7 @@ async def stream(
                             payload_dict["output"] = output
 
                         yield f"data: {orjson_dumps(payload_dict)}\n\n"
-                        
+
                         # We only fetch state if we really need the new checkpoint
                         # This avoids the expensive DB call per node-end
                         # But we need the checkpoint ID for the frontend to track history correctly.
@@ -288,7 +310,7 @@ async def stream(
     # Actually, Starlette cancels the response task if client disconnects.
     # For explicit abort via BUTTON while staying connected to stream (or reconnecting),
     # we need the backend task (the graph execution) to be cancellable.
-    
+
     # Wait: The stream endpoint RUNS the graph via astream_events.
     # If we want to cancel execution, we must cancel the task running astream_events.
     # Since this is a generator inside StreamingResponse, we can wrap it?
@@ -296,12 +318,14 @@ async def stream(
     # If we call /abort, we want to cancel the GRAPH EXECUTION.
     # But here, graph execution (`graph.astream_events`) creates its own internal tasks or runs in this loop.
     # If we cancel the task hosting this `event_generator`, `astream_events` should cancel.
-    
+
     # So we need to access the current task.
     import asyncio
+
     current_task = asyncio.current_task()
     if current_task:
         from services.execution_manager import ExecutionManager
+
         ExecutionManager.get_instance().register_task(thread_id, current_task)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -311,7 +335,7 @@ async def stream(
 async def abort_job(thread_id: str):
     """Abort a running job/stream for the given thread_id."""
     from services.execution_manager import ExecutionManager
-    
+
     cancelled = ExecutionManager.get_instance().cancel_task(thread_id)
     if cancelled:
         return {"status": "cancelled", "message": f"Job {thread_id} aborted."}
@@ -319,4 +343,3 @@ async def abort_job(thread_id: str):
         # It might not be running or not found
         # We can also try to force interrupt the graph state if supported?
         return {"status": "not_found", "message": "No active job found for this thread."}
-
