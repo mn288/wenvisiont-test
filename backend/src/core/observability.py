@@ -1,5 +1,4 @@
 import hashlib
-import logging
 import os
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -8,7 +7,7 @@ from uuid import UUID
 from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler
 
-logger = logging.getLogger(__name__)
+from brain.logger import app_logger
 
 
 def _ensure_langfuse_env():
@@ -17,7 +16,7 @@ def _ensure_langfuse_env():
         base_url = os.getenv("LANGFUSE_BASE_URL")
         if base_url:
             os.environ["LANGFUSE_HOST"] = base_url
-            logger.debug(f"Set LANGFUSE_HOST to {base_url}")
+            app_logger.debug(f"Set LANGFUSE_HOST to {base_url}")
 
 
 # Run once on module load
@@ -56,7 +55,7 @@ class AntigravityCallbackHandler(CallbackHandler):
         # Initialize base CallbackHandler (no constructor args in v3!)
         super().__init__(**kwargs)
 
-        logger.debug(f"AntigravityCallbackHandler initialized - session: {self._session_id}, user: {self._user_id}")
+        app_logger.debug(f"AntigravityCallbackHandler initialized - session: {self._session_id}, user: {self._user_id}")
 
     def _inject_metadata(self, metadata: Optional[Dict[str, Any]], parent_run_id: Optional[UUID]) -> Dict[str, Any]:
         """
@@ -189,7 +188,7 @@ def get_langfuse_client() -> Langfuse:
     global _langfuse_client
     if _langfuse_client is None:
         _langfuse_client = Langfuse()
-        logger.info(f"Langfuse client initialized with host: {os.getenv('LANGFUSE_HOST')}")
+        app_logger.info(f"Langfuse client initialized with host: {os.getenv('LANGFUSE_HOST')}")
     return _langfuse_client
 
 
@@ -200,6 +199,6 @@ def shutdown_langfuse():
     """
     global _langfuse_client
     if _langfuse_client:
-        print("Flushing Langfuse traces...")
+        app_logger.info("Flushing Langfuse traces...")
         _langfuse_client.flush()
-        print("Langfuse flush complete.")
+        app_logger.info("Langfuse flush complete.")

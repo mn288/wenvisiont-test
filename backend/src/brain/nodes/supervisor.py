@@ -82,6 +82,7 @@ async def supervisor_node(
 
     # --- 3. ORCHESTRATOR (PLANNER-EXECUTOR) ---
     current_plan = state.get("plan", [])
+    recent_results = state.get("results", [])
 
     # Log the orchestration attempt
     await logger.log_step(
@@ -102,6 +103,7 @@ async def supervisor_node(
         trace_id=thread_id,
         user_id=user_id,
         allowed_node_names=allowed_node_names,
+        recent_results=recent_results,
     )
 
     # Log the decision

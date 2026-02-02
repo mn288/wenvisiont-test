@@ -100,7 +100,7 @@ class AgentRegistry:
                     backstory=DYNAMIC_AGENT_BACKSTORY.format(server_name=server.name, tool_summary=tool_summary),
                     mcp_servers=[server.name],
                     files_access=True,
-                    use_reflection=False,
+                    use_reflection=True,
                     task_domains=["tools", server.name.lower(), "execution"],
                     importance_score=0.5,
                     success_rate=1.0,

@@ -5,6 +5,7 @@ from typing import List, Optional
 from dateutil import parser
 from fastapi import APIRouter
 
+from brain.logger import app_logger
 from core.database import pool
 from models.conversations import Conversation
 from models.history import StepLogResponse
@@ -281,7 +282,7 @@ async def fork_conversation(
     try:
         await graph.aupdate_state(config, update_values)
     except Exception as e:
-        print(f"Fork failed: {e}")
+        app_logger.error(f"Fork failed: {e}")
 
     return {
         "status": "forked",

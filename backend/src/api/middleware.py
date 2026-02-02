@@ -1,6 +1,6 @@
 import contextvars
 
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Global context variable to store tenant information
@@ -78,3 +78,28 @@ def get_current_role() -> str:
 def get_current_user_id() -> str:
     """Helper to get current user ID from context"""
     return user_id_context.get() or "anonymous-user"
+
+
+def require_role(required_role: str):
+    """
+    Dependency factory to enforce role-based access control.
+    Returns a dependency function that checks if the current user has the required role.
+    """
+
+    def role_dependency():
+        current_role = get_current_role()
+
+        # ADMIN can access everything
+        if current_role == "ADMIN":
+            return True
+
+        # Exact match required for others (can be enhanced with hierarchy if needed)
+        if current_role == required_role:
+            return True
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Operation requires role {required_role}, but found {current_role}",
+        )
+
+    return role_dependency

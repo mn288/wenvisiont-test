@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from api.dependencies import get_session, require_role
+from brain.logger import app_logger
 from brain.registry import AgentRegistry
 from models.mcp import MCPServer, MCPServerCreate
 from services.graph_service import GraphService
@@ -17,12 +18,12 @@ async def background_system_reload(server_name: str, action: str):
     Background task to reload the system (Agents + Graph) after a change.
     """
     try:
-        print(f"Background Task: Reloading system after {action} of MCP Server '{server_name}'...")
+        app_logger.info(f"Background Task: Reloading system after {action} of MCP Server '{server_name}'...")
         await AgentRegistry().load_agents()
         await GraphService.get_instance().reload_graph()
-        print("Background Task: System reload complete.")
+        app_logger.info("Background Task: System reload complete.")
     except Exception as e:
-        print(f"Background Task Error: Failed to reload system: {e}")
+        app_logger.error(f"Background Task Error: Failed to reload system: {e}")
 
 
 @router.get("/", response_model=List[MCPServer], dependencies=[Depends(require_role("ADMIN"))])
@@ -36,9 +37,7 @@ async def list_mcp_servers(session: AsyncSession = Depends(get_session)):
 
 @router.post("/", response_model=MCPServer, dependencies=[Depends(require_role("ADMIN"))])
 async def create_mcp_server(
-    server: MCPServerCreate, 
-    background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_session)
+    server: MCPServerCreate, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)
 ):
     """Add a new MCP server. Reloads system in background."""
     # Basic Validation
@@ -49,10 +48,10 @@ async def create_mcp_server(
 
     try:
         new_server = await mcp_service.create_server(server, session=session)
-        
+
         # Trigger Reload in Background
         background_tasks.add_task(background_system_reload, new_server.name, "creation")
-        
+
         return new_server
     except ValueError as e:
         # Check for duplication (handled in service now, but message matching helps)
@@ -66,17 +65,13 @@ async def create_mcp_server(
 
 
 @router.delete("/{name}", dependencies=[Depends(require_role("ADMIN"))])
-async def delete_mcp_server(
-    name: str, 
-    background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_session)
-):
+async def delete_mcp_server(name: str, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)):
     """Delete an MCP server. Reloads system in background."""
     try:
         deleted = await mcp_service.delete_server(name, session=session)
         if not deleted:
             raise HTTPException(status_code=404, detail="MCP Server not found")
-        
+
         # Trigger Reload in Background
         background_tasks.add_task(background_system_reload, name, "deletion")
 

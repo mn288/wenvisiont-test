@@ -6,6 +6,8 @@ from fastmcp import Client, FastMCP
 from pydantic import BaseModel, PrivateAttr, create_model
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from brain.logger import app_logger
+
 # Check if MCPServerConfig is available, if not use Dict or define locally for typing
 try:
     from models.mcp import MCPServerConfig
@@ -165,7 +167,7 @@ class MCPAdapter:
                                     ):
                                         with attempt:
                                             async with self._create_client(_conf) as active_client:
-                                                print(
+                                                app_logger.debug(
                                                     f"DEBUG: Calling tool {tool_name} with args {kwargs} (Attempt {attempt.retry_state.attempt_number})"
                                                 )
                                                 result = await active_client.call_tool(tool_name, arguments=kwargs)
@@ -180,7 +182,9 @@ class MCPAdapter:
                                     if len(error_msg) > 200:
                                         error_msg = error_msg[:200] + "... (error truncated)"
 
-                                    print(f"ERROR: Failed to execute tool {tool_name} after retries: {error_msg}")
+                                    app_logger.error(
+                                        f"ERROR: Failed to execute tool {tool_name} after retries: {error_msg}"
+                                    )
                                     return f"Error executing tool {tool_name}: {error_msg}"
 
                             # Sync wrapper with SAFE execution
@@ -220,17 +224,14 @@ class MCPAdapter:
                             all_tools.append(crew_tool)
 
                         except Exception as e:
-                            print(f"Error converting tool {tool.name}: {e}")
+                            app_logger.error(f"Error converting tool {tool.name}: {e}")
                             continue
 
             except Exception as e:
-                import logging
-
-                logger = logging.getLogger(__name__)
                 server_name = getattr(server_conf, "name", "unknown")
                 server_url = getattr(server_conf, "url", "unknown") if hasattr(server_conf, "url") else "stdio"
 
-                logger.error(f"Failed to load tools from MCP server '{server_name}' ({server_url}). Error: {e}")
+                app_logger.error(f"Failed to load tools from MCP server '{server_name}' ({server_url}). Error: {e}")
 
                 # FAIL FAST: We propagate the error so the Registry knows this agent is broken.
                 raise RuntimeError(f"Critical: Could not load tools from server '{server_name}': {e}")
@@ -279,7 +280,7 @@ class MCPAdapter:
                     server_map[server_name] = tool_list
 
             except Exception as e:
-                print(f"Error listing tools for server {getattr(server_conf, 'name', 'unknown')}: {e}")
+                app_logger.error(f"Error listing tools for server {getattr(server_conf, 'name', 'unknown')}: {e}")
                 server_map[getattr(server_conf, "name", "unknown")] = [{"error": str(e)}]
 
         return server_map

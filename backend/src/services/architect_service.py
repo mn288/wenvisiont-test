@@ -1,16 +1,15 @@
-import logging
 from typing import Any, Dict
 
 import orjson
 
+from brain.logger import app_logger
 from brain.prompts import ARCHITECT_PROMPT
 from brain.registry import AgentRegistry
 from models.architect import GraphConfig
 from services.tools import tool_service
 from utils.pii import masker
 
-logger = logging.getLogger(__name__)
-
+# logger = logging.getLogger(__name__)
 
 
 class ArchitectService:
@@ -93,7 +92,7 @@ class ArchitectService:
             config = GraphConfig(**data)
         except Exception as e:
             # Log the raw content for debugging
-            print(f"Architect Parse Error: {e}\nRaw Content: {content}")
+            app_logger.error(f"Architect Parse Error: {e}\nRaw Content: {content}")
             raise ValueError(f"Failed to parse Architect response: {e}")
 
         # 5b. Tool Enforcement (Auto-bind Tools to Roles)

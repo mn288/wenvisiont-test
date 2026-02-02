@@ -12,7 +12,7 @@ class MCPService:
         """Fetch all MCP servers from the database."""
         if session:
             return await self._get_all_servers_exec(session)
-        
+
         async with async_session_maker() as session:
             return await self._get_all_servers_exec(session)
 
@@ -25,7 +25,7 @@ class MCPService:
         """Fetch specific MCP servers by name."""
         if not names:
             return []
-            
+
         if session:
             return await self._get_servers_by_names_exec(names, session)
 
@@ -43,24 +43,24 @@ class MCPService:
         Raises ValueError if verification fails.
         """
         from fastmcp import Client
-        
+
         # Determine Client based on type
         try:
             if server.type == "stdio":
                 if not server.command:
-                     raise ValueError("Command required for stdio")
+                    raise ValueError("Command required for stdio")
                 client = Client(server.command, args=server.args or [], env=server.env)
             elif server.type in ["sse", "https"]:
                 if not server.url:
-                     raise ValueError("URL required for sse/https")
+                    raise ValueError("URL required for sse/https")
                 client = Client(server.url)
             else:
                 raise ValueError(f"Unknown server type: {server.type}")
-                
+
             # Attempt connection and listing
             async with client:
                 await client.list_tools()
-                
+
         except Exception as e:
             raise ValueError(f"Verification Failed: Could not connect to MCP server '{server.name}'. Error: {str(e)}")
 
@@ -84,10 +84,10 @@ class MCPService:
 
         # Create DB Model
         db_server = MCPServer.model_validate(server)
-        
+
         # Manually ensure env is set correctly if needed (pydantic handles it mostly)
         # But for SQLModel/Pydantic, we rely on the model.
-        
+
         session.add(db_server)
         await session.commit()
         await session.refresh(db_server)
@@ -97,7 +97,7 @@ class MCPService:
         """Delete an MCP server by name."""
         if session:
             return await self._delete_server_exec(name, session)
-            
+
         async with async_session_maker() as session:
             return await self._delete_server_exec(name, session)
 
@@ -105,13 +105,19 @@ class MCPService:
         statement = select(MCPServer).where(MCPServer.name == name)
         results = await session.exec(statement)
         server = results.first()
-        
+
         if not server:
             return False
-            
+
         await session.delete(server)
         await session.commit()
         return True
 
+
 # Global Instance
 mcp_service = MCPService()
+
+
+def get_mcp_service() -> MCPService:
+    """Singleton accessor for MCPService."""
+    return mcp_service

@@ -1,5 +1,6 @@
 import orjson
 
+from brain.logger import app_logger
 from core.database import pool
 
 
@@ -10,11 +11,7 @@ async def seed_infrastructure():
     """
     # Default configuration matching the environment
     # Note: local_workspace_path must match the container's volume mount
-    default_config = {
-        "local_workspace_path": "/app/data/workspace",
-        "allowed_mcp_servers": [],
-        "s3_access": {}
-    }
+    default_config = {"local_workspace_path": "/app/data/workspace", "allowed_mcp_servers": [], "s3_access": {}}
 
     try:
         async with pool.connection() as conn:
@@ -22,19 +19,19 @@ async def seed_infrastructure():
                 # Check if config exists
                 await cur.execute("SELECT 1 FROM configurations WHERE key = 'infrastructure_config'")
                 row = await cur.fetchone()
-                
+
                 if not row:
-                    print("SEEDER: infrastructure_config not found. Seeding defaults...")
+                    app_logger.info("SEEDER: infrastructure_config not found. Seeding defaults...")
                     await cur.execute(
                         """
                         INSERT INTO configurations (key, value, updated_at) 
                         VALUES (%s, %s, CURRENT_TIMESTAMP)
                         """,
-                        ("infrastructure_config", orjson.dumps(default_config).decode())
+                        ("infrastructure_config", orjson.dumps(default_config).decode()),
                     )
-                    print("SEEDER: infrastructure_config seeded successfully.")
+                    app_logger.info("SEEDER: infrastructure_config seeded successfully.")
                 else:
-                    print("SEEDER: infrastructure_config already exists.")
-                    
+                    app_logger.info("SEEDER: infrastructure_config already exists.")
+
     except Exception as e:
-        print(f"SEEDER: Failed to seed infrastructure config: {e}")
+        app_logger.error(f"SEEDER: Failed to seed infrastructure config: {e}")

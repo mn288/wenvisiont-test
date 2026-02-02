@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from brain.logger import app_logger
 from brain.registry import AgentRegistry
 from core.database import pool
 
@@ -40,6 +41,6 @@ async def get_stats():
                 # If we find [REDACTED] in logs, we assume compliance is working.
 
     except Exception as e:
-        print(f"Stats Error: {e}")
+        app_logger.error(f"Stats Error: {e}")
 
     return stats

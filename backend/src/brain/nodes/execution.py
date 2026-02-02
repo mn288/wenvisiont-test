@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command, Send
 
-from brain.logger import LogHandler
+from brain.logger import LogHandler, app_logger
 
 # Import supervisor for the dynamic workflow reconstruction (recursive import prevention?)
 # We will import inside the function or pass it to avoid cycle if supervisor imports execution.
@@ -157,8 +157,10 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
                 break
 
             # Perform Reflection
+            # OPTIMIZATION: We explicitly ask for a 'summary' if the output is large.
             reflection_prompt = REFLECTION_PROMPT.format(
-                input_request=state["input_request"], raw_output=result.raw_output
+                input_request=state["input_request"],
+                raw_output=result.raw_output[:50000],  # Safety cap for reflection context
             )
 
             # Inject observability callbacks for reflection call
@@ -190,6 +192,9 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
                         "Self-Correction: Output verified and approved.",
                         checkpoint_id,
                     )
+                    # Use summary from reflection if available
+                    if "summary" in critique_json and critique_json["summary"]:
+                        result.summary = critique_json["summary"]
                     break
 
                 elif status == "FIXED":
@@ -198,7 +203,13 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
                     if refined_output:
                         # Update the result object in-place
                         result.raw_output = refined_output
-                        result.summary = refined_output[:4000] + "..." if len(refined_output) > 4000 else refined_output
+                        # If the Reflector provided a specific summary, use it. Otherwise truncate.
+                        if "summary" in critique_json and critique_json["summary"]:
+                            result.summary = critique_json["summary"]
+                        else:
+                            result.summary = (
+                                refined_output[:500] + "..." if len(refined_output) > 500 else refined_output
+                            )
                         await logger.log_step(
                             thread_id,
                             agent_name,
@@ -281,6 +292,19 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
         result_dump["summary"] = masked_summary
         result_dump["raw_output"] = masked_raw
 
+        # STATE PERSISTENCE: Check if agent returned global state updates via metadata
+        # Convention: Agents put state updates in result.metadata['output_state']
+        new_global_state = {}
+        if result.metadata and "output_state" in result.metadata:
+            new_global_state = result.metadata["output_state"]
+            await logger.log_step(
+                thread_id,
+                agent_name,
+                "info",
+                f"Agent updated global state with keys: {list(new_global_state.keys())}",
+                checkpoint_id,
+            )
+
         # DyLAN Feedback Loop: Update success rate on completion
         registry = AgentRegistry()
         await registry.update_agent_success_rate(agent_name, success=True)
@@ -300,6 +324,7 @@ async def execute_agent_node(state: GraphState, config: RunnableConfig, agent_na
             "results": [result_dump],
             "messages": [AIMessage(content=masked_summary, name=agent_name)],
             "context": f"\n\nAgent {agent_name} Findings:\n{masked_raw[:20000]}",
+            "global_state": new_global_state,  # Merge into global blackboard
         }
 
     except asyncio.CancelledError:
@@ -466,8 +491,6 @@ async def execute_workflow_node(state: GraphState, config: RunnableConfig, workf
         return {"results": new_results, "context": new_context, "messages": new_messages}
 
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        app_logger.error(f"Team Execution Failed: {e}", exc_info=True)
         await logger.log_step(thread_id, f"TEAM_{workflow_name}", "error", str(e), checkpoint_id)
         return {"errors": [f"Team Execution Failed: {str(e)}"]}

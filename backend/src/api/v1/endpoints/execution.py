@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
 from api.middleware import get_current_role, get_current_user_id
+from brain.logger import app_logger
 from core.database import pool
 from core.observability import get_observability_callback
 from services.graph_service import GraphService
@@ -50,7 +51,7 @@ async def run_bg_graph(thread_id: str, input_request: str, user_id: str):
         initial_state = {"input_request": input_request}
         await graph.ainvoke(initial_state, config=config)
     except Exception as e:
-        print(f"Background Job Error (Thread {thread_id}): {e}")
+        app_logger.error(f"Background Job Error (Thread {thread_id}): {e}")
 
 
 @router.post("/jobs", status_code=202)
@@ -81,8 +82,9 @@ async def create_job(
                     (thread_id, title),
                 )
             await conn.commit()
+            await conn.commit()
     except Exception as e:
-        print(f"Failed to save conversation: {e}")
+        app_logger.error(f"Failed to save conversation: {e}")
 
     background_tasks.add_task(run_bg_graph, thread_id, input_request, user_id)
 
@@ -176,7 +178,7 @@ async def stream(
                     )
                 await conn.commit()
         except Exception as e:
-            print(f"Failed to save conversation: {e}")
+            app_logger.error(f"Failed to save conversation: {e}")
             pass
     else:
         input_data = None
@@ -299,10 +301,10 @@ async def stream(
                 yield "data: [DONE]\n\n"
 
         except asyncio.CancelledError:
-            print(f"Stream Cancelled for thread {thread_id}")
+            app_logger.info(f"Stream Cancelled for thread {thread_id}")
             yield f"data: {orjson_dumps({'type': 'error', 'content': 'Task Cancelled via Abort'})}\n\n"
         except Exception as e:
-            print(f"Stream Error: {e}")
+            app_logger.error(f"Stream Error: {e}")
             yield f"data: {orjson_dumps({'type': 'error', 'content': str(e)})}\n\n"
 
     # Register this stream processing as a task if needed, or simply return response.

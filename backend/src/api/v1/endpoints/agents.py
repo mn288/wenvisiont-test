@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.dependencies import require_role
+from brain.logger import app_logger
 from brain.registry import AgentRegistry, NodeConfig
 from crew.agents import llm
 
@@ -82,7 +83,7 @@ async def create_or_update_agent(config: NodeConfig, background_tasks: Backgroun
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Warning: Failed to validate MCP servers: {e}")
+            app_logger.warning(f"Warning: Failed to validate MCP servers: {e}")
 
     # Save to DB and Cache
     try:
@@ -138,7 +139,7 @@ async def generate_agent(request: GenerateAgentRequest):
                     # Extract relevant info to add to context
                     infra_context = f"\nINFRASTRUCTURE CONTEXT (The user has these global defaults):\n{infra_config}\n"
     except Exception as e:
-        print(f"Warning: Failed to fetch infra config: {e}")
+        app_logger.warning(f"Warning: Failed to fetch infra config: {e}")
 
     # Enforce Permissions based on Infrastructure Configuration
     infra_data = infra_config if "infra_config" in locals() and infra_config else {}
@@ -237,5 +238,5 @@ async def list_mcp_servers():
                 rows = await cur.fetchall()
                 return [row[0] for row in rows]
     except Exception as e:
-        print(f"Warning: Failed to fetch MCP servers: {e}")
+        app_logger.warning(f"Warning: Failed to fetch MCP servers: {e}")
         return []

@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from brain.logger import app_logger
 from brain.prompts import ORCHESTRATOR_PROMPT
 from brain.registry import AgentRegistry
 from crew.agents import llm
@@ -45,6 +46,7 @@ class OrchestratorService:
         trace_id: Optional[str] = None,
         user_id: Optional[str] = None,
         allowed_node_names: Optional[List[str]] = None,
+        recent_results: List[dict] = [],
     ) -> tuple[List[str], List[str]]:
         """
         Analyzes the current state and returns (next_step, new_plan).
@@ -126,8 +128,9 @@ class OrchestratorService:
                     continue
 
                 # If it's a large text blob, summarize it
-                if isinstance(v, str) and len(v) > 500:
-                    summary[k] = f"<Content Truncated: {len(v)} chars>"
+                # OPTIMIZATION: Aggressive truncation to 200 chars
+                if isinstance(v, str) and len(v) > 200:
+                    summary[k] = f"<Pointer: {len(v)} chars. Use tools to read.>"
                 elif isinstance(v, dict):
                     # Recursive summary for nested dicts (limit depth if needed, but simple recursion is fine for now)
                     summary[k] = summarize_state(v)
@@ -147,6 +150,18 @@ class OrchestratorService:
         history_display = "No history yet."
         if conversation_buffer:
             history_display = "\n".join(conversation_buffer)
+
+        # Enhance History with Last Execution Result (X-RAY VISION)
+        if recent_results:
+            history_display += "\n\n### RECENT TOOL OUTPUTS (Internal X-Ray):\n"
+            for res in recent_results[-3:]:  # Show last 3
+                agent = res.get("assigned_to", "unknown")
+                summary = res.get("summary", "No summary")
+                # We prefer raw_output if short enough, otherwise summary
+                content = res.get("raw_output", "")
+                if len(content) > 500:
+                    content = summary
+                history_display += f"- {agent}: {content[:600]}...\n"
 
         current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -189,12 +204,12 @@ class OrchestratorService:
                 decision: OrchestratorDecision = await structured_llm.ainvoke(prompt, config=run_config)
             else:
                 # Fallback if llm wrapper doesn't expose client (should not happen based on inspection)
-                print("Warning: llm.client not found, using legacy parsing.")
+                app_logger.warning("llm.client not found, using legacy parsing.")
                 # ... legacy code or error ...
                 raise NotImplementedError("Orchestrator requires an LLM client supporting structured output.")
 
         except Exception as e:
-            print(f"Orchestrator Structured Output Error: {e}")
+            app_logger.error(f"Orchestrator Structured Output Error: {e}")
             # Fallback to QA if orchestration fails
             return ["qa"], []
 
@@ -206,7 +221,7 @@ class OrchestratorService:
                 f.write(f"Reasoning: {decision.reasoning}\n")
                 f.write(f"Decisions: {decision.selected_agents}\n")
         except Exception as e:
-            print(f"Debug Log Error: {e}")
+            app_logger.error(f"Debug Log Error: {e}")
 
         decisions = [d.strip().upper() for d in decision.selected_agents]
 

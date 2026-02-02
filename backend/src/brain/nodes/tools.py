@@ -3,7 +3,7 @@ import uuid
 import orjson
 from langchain_core.runnables import RunnableConfig
 
-from brain.logger import LogHandler
+from brain.logger import LogHandler, app_logger
 from core.database import pool
 from crew.agents import llm
 from models.state import AgentResult, GraphState
@@ -163,7 +163,7 @@ async def tool_execution_node(state: GraphState, config: RunnableConfig) -> dict
 
                         citations.append(Citation(**c))
                 except Exception as cit_err:
-                    print(f"Warning: Failed to parse citation: {cit_err}")
+                    app_logger.warning(f"Warning: Failed to parse citation: {cit_err}")
 
         # Also check if output is a JSON string containing structure
         elif isinstance(output, str):

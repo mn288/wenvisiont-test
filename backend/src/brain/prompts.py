@@ -116,6 +116,7 @@ Return a JSON object:
   "status": "APPROVED" | "FIXED" | "REJECTED",
   "reason": "Brief explanation",
   "refined_output": "The original output if APPROVED, the corrected output if FIXED, or null if REJECTED",
+  "summary": "A high-quality, 1-2 sentence summary of WHAT was found or done. Do not include raw data/code here.",
   "feedback": "Instructions for the agent if REJECTED"
 }}
 """

@@ -3,6 +3,7 @@ from langgraph.graph.state import CompiledStateGraph
 from psycopg import AsyncConnection
 
 from brain.graph import build_workflow
+from brain.logger import app_logger
 from core.config import settings
 from core.database import pool
 
@@ -28,37 +29,33 @@ class GraphService:
 
     async def reload_graph(self):
         """Rebuilds and recompiles the graph with the latest registry updates."""
-        print("Reloading Graph...")
+        app_logger.info("Reloading Graph...")
 
         # Build new workflow
-        print("DEBUG: Calling build_workflow()...")
+        app_logger.debug("Calling build_workflow()...")
         workflow = build_workflow()
-        print("DEBUG: build_workflow() done.")
+        app_logger.debug("build_workflow() done.")
 
         # One-time setup: Create checkpoint tables using autocommit connection
         # This is required because CREATE INDEX CONCURRENTLY cannot run inside a transaction
         if not GraphService._tables_initialized:
             try:
-                print("DEBUG: Initializing checkpoint tables...")
-                async with await AsyncConnection.connect(
-                    settings.database_url,
-                    autocommit=True
-                ) as conn:
+                app_logger.debug("Initializing checkpoint tables...")
+                async with await AsyncConnection.connect(settings.database_url, autocommit=True) as conn:
                     setup_checkpointer = AsyncPostgresSaver(conn)
                     await setup_checkpointer.setup()
-                    print("LangGraph checkpoint tables initialized.")
+                    app_logger.info("LangGraph checkpoint tables initialized.")
                     GraphService._tables_initialized = True
             except Exception as e:
                 # Tables might already exist
-                print(f"Checkpoint setup note: {e}")
+                app_logger.info(f"Checkpoint setup note: {e}")
                 GraphService._tables_initialized = True
 
         # Create the runtime checkpointer using the pool
         checkpointer = AsyncPostgresSaver(pool)
 
         # Compile
-        print("DEBUG: Compiling graph...")
+        app_logger.debug("Compiling graph...")
         self.compiled_graph = workflow.compile(checkpointer=checkpointer, interrupt_before=["qa", "tool_execution"])
-        print("Graph Reloaded Successfully.")
+        app_logger.info("Graph Reloaded Successfully.")
         return self.compiled_graph
-
